@@ -1,53 +1,35 @@
 #include "tonc.h"
-#include "sappy_engine.h"
+#include "Sound.h"
 
-// External functions from sappy_samples.c
-extern SappyInstrument gPianoInstrument;
-extern SappyInstrument gOrganInstrument;
-extern SappyInstrument gDrumInstrument;
-extern void sappy_init_samples(void);
+// Simple sine wave sample for testing (256 samples, one period)
+const s8 sineWaveData[] = {
+    0, 3, 6, 9, 12, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
+    49, 52, 54, 57, 60, 63, 65, 68, 71, 73, 76, 78, 81, 83, 86, 88,
+    90, 92, 95, 97, 99, 101, 103, 105, 107, 108, 110, 112, 113, 115, 116, 118,
+    119, 121, 122, 123, 124, 125, 126, 127, 127, 127, 127, 127, 127, 127, 127, 127,
+    127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 126, 125, 124,
+    123, 122, 121, 119, 118, 116, 115, 113, 112, 110, 108, 107, 105, 103, 101, 99,
+    97, 95, 92, 90, 88, 86, 83, 81, 78, 76, 73, 71, 68, 65, 63, 60,
+    57, 54, 52, 49, 46, 43, 40, 37, 34, 31, 28, 25, 22, 19, 16, 12,
+    9, 6, 3, 0, -3, -6, -9, -12, -16, -19, -22, -25, -28, -31, -34, -37,
+    -40, -43, -46, -49, -52, -54, -57, -60, -63, -65, -68, -71, -73, -76, -78, -81,
+    -83, -86, -88, -90, -92, -95, -97, -99, -101, -103, -105, -107, -108, -110, -112, -113,
+    -115, -116, -118, -119, -121, -122, -123, -124, -125, -126, -127, -127, -128, -128, -128, -128,
+    -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -127,
+    -127, -126, -125, -124, -123, -122, -121, -119, -118, -116, -115, -113, -112, -110, -108, -107,
+    -105, -103, -101, -99, -97, -95, -92, -90, -88, -86, -83, -81, -78, -76, -73, -71,
+    -68, -65, -63, -60, -57, -54, -52, -49, -46, -43, -40, -37, -34, -31, -28, -25,
+    -22, -19, -16, -12, -9, -6, -3
+};
 
-// Background image data (we'll keep using the converted image)
+// External background data (if exists)
 extern const unsigned short titleBitmap[];
 extern const unsigned short titlePal[];
 
-// Current instrument selection
-static int currentInstrument = 0;
-static SappyInstrument* instruments[3];
-
 // VBlank interrupt handler
 void vblank_handler(void) {
-    // Update sound mixer
-    sappy_vblank_intr();
-}
-
-// Initialize background
-void init_background(void) {
-    // Set video mode to Mode 3 (240x160, 16-bit bitmap)
-    REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
-    
-    // For Mode 3, we'd need to copy bitmap data directly to VRAM
-    // For now, let's use Mode 0 with the tile-based background
-    REG_DISPCNT = DCNT_MODE0 | DCNT_BG0;
-    
-    // Set up BG0 for 256x256 tilemap
-    REG_BG0CNT = BG_CBB(0) | BG_SBB(31) | BG_8BPP | BG_SIZE0;
-    
-    // Note: We'd need to properly convert and load the background here
-    // For now, we'll just clear the screen
-    pal_bg_mem[0] = RGB15(0, 0, 0);    // Black background
-    pal_bg_mem[1] = RGB15(31, 31, 31); // White text
-}
-
-// Draw simple UI text
-void draw_ui(void) {
-    // Clear text area
-    for(int i = 0; i < 32*20; i++) {
-        se_mem[31][i] = 0;
-    }
-    
-    // Simple text display (would need a proper font system)
-    // For now, just indicate the mode
+    // Call sound VSync to swap buffers
+    SndVSync();
 }
 
 int main(void) {
@@ -55,110 +37,85 @@ int main(void) {
     irq_init(NULL);
     irq_add(II_VBLANK, vblank_handler);
     
-    // Initialize background
-    init_background();
+    // Try to set up background image if it exists
+    // Using mode 3 for simplicity (240x160 16-bit bitmap)
+    REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
     
-    // Initialize Sappy sound engine
-    sappy_init(22050);  // 22.05 kHz sample rate
-    sappy_init_samples();
+    // If we have the background image data, copy it
+    // The title.bmp should have been converted to a C array
+    // For now, just fill with a color to show something
+    u16 *vram = (u16*)MEM_VRAM;
+    for(int i = 0; i < 240*160; i++) {
+        vram[i] = CLR_NAVY;  // Dark blue background
+    }
     
-    // Set up instrument array
-    instruments[0] = &gPianoInstrument;
-    instruments[1] = &gOrganInstrument;
-    instruments[2] = &gDrumInstrument;
+    // Initialize sound system
+    SndInit();
     
-    // Main game loop
-    int notePressed[8] = {0};  // Track which notes are pressed
+    // Enable interrupts
+    REG_IME = 1;
     
+    // Main loop
     while(1) {
         // Wait for VBlank
         VBlankIntrWait();
         
-        // Read keys
+        // Update input
         key_poll();
         
-        // Switch instruments with L/R
-        if(key_hit(KEY_L)) {
-            currentInstrument = (currentInstrument - 1 + 3) % 3;
-        }
-        if(key_hit(KEY_R)) {
-            currentInstrument = (currentInstrument + 1) % 3;
+        // Mix audio for next frame
+        SndMix();
+        
+        // Handle input - play notes on button press
+        if(key_hit(KEY_A)) {
+            // Play middle C (261 Hz)
+            sndChannel[0].data = 0;  // Stop first
+            sndChannel[0].pos = 0;
+            sndChannel[0].inc = (261 << 12) / 18157;  // Frequency to increment
+            sndChannel[0].vol = 64;  // Max volume
+            sndChannel[0].length = 256 << 12;  // Sample length
+            sndChannel[0].loopLength = 256 << 12;  // Loop the whole sample
+            sndChannel[0].data = (s8*)sineWaveData;  // Start playing
         }
         
-        // Play notes with buttons (C major scale)
-        // A = C (60), B = D (62), X = E (64), Y = F (65)
-        // D-pad: G (67), A (69), B (71), C (72)
-        
-        if(key_hit(KEY_A) && !notePressed[0]) {
-            sappy_play_note(0, instruments[currentInstrument], 60, 127);  // C
-            notePressed[0] = 1;
-        }
-        if(key_released(KEY_A) && notePressed[0]) {
-            sappy_stop_note(0);
-            notePressed[0] = 0;
+        if(key_hit(KEY_B)) {
+            // Play D (293 Hz)
+            sndChannel[1].data = 0;
+            sndChannel[1].pos = 0;
+            sndChannel[1].inc = (293 << 12) / 18157;
+            sndChannel[1].vol = 64;
+            sndChannel[1].length = 256 << 12;
+            sndChannel[1].loopLength = 256 << 12;
+            sndChannel[1].data = (s8*)sineWaveData;
         }
         
-        if(key_hit(KEY_B) && !notePressed[1]) {
-            sappy_play_note(1, instruments[currentInstrument], 62, 127);  // D
-            notePressed[1] = 1;
-        }
-        if(key_released(KEY_B) && notePressed[1]) {
-            sappy_stop_note(1);
-            notePressed[1] = 0;
-        }
-        
-        if(key_hit(KEY_LEFT) && !notePressed[2]) {
-            sappy_play_note(2, instruments[currentInstrument], 64, 127);  // E
-            notePressed[2] = 1;
-        }
-        if(key_released(KEY_LEFT) && notePressed[2]) {
-            sappy_stop_note(2);
-            notePressed[2] = 0;
+        if(key_hit(KEY_LEFT)) {
+            // Play E (329 Hz)
+            sndChannel[2].data = 0;
+            sndChannel[2].pos = 0;
+            sndChannel[2].inc = (329 << 12) / 18157;
+            sndChannel[2].vol = 64;
+            sndChannel[2].length = 256 << 12;
+            sndChannel[2].loopLength = 256 << 12;
+            sndChannel[2].data = (s8*)sineWaveData;
         }
         
-        if(key_hit(KEY_RIGHT) && !notePressed[3]) {
-            sappy_play_note(3, instruments[currentInstrument], 65, 127);  // F
-            notePressed[3] = 1;
-        }
-        if(key_released(KEY_RIGHT) && notePressed[3]) {
-            sappy_stop_note(3);
-            notePressed[3] = 0;
-        }
-        
-        if(key_hit(KEY_UP) && !notePressed[4]) {
-            sappy_play_note(4, instruments[currentInstrument], 67, 127);  // G
-            notePressed[4] = 1;
-        }
-        if(key_released(KEY_UP) && notePressed[4]) {
-            sappy_stop_note(4);
-            notePressed[4] = 0;
+        if(key_hit(KEY_RIGHT)) {
+            // Play F (349 Hz)
+            sndChannel[3].data = 0;
+            sndChannel[3].pos = 0;
+            sndChannel[3].inc = (349 << 12) / 18157;
+            sndChannel[3].vol = 64;
+            sndChannel[3].length = 256 << 12;
+            sndChannel[3].loopLength = 256 << 12;
+            sndChannel[3].data = (s8*)sineWaveData;
         }
         
-        if(key_hit(KEY_DOWN) && !notePressed[5]) {
-            sappy_play_note(5, instruments[currentInstrument], 69, 127);  // A
-            notePressed[5] = 1;
-        }
-        if(key_released(KEY_DOWN) && notePressed[5]) {
-            sappy_stop_note(5);
-            notePressed[5] = 0;
-        }
-        
-        if(key_hit(KEY_START) && !notePressed[6]) {
-            sappy_play_note(6, instruments[currentInstrument], 71, 127);  // B
-            notePressed[6] = 1;
-        }
-        if(key_released(KEY_START) && notePressed[6]) {
-            sappy_stop_note(6);
-            notePressed[6] = 0;
-        }
-        
-        if(key_hit(KEY_SELECT) && !notePressed[7]) {
-            sappy_play_note(7, instruments[currentInstrument], 72, 127);  // High C
-            notePressed[7] = 1;
-        }
-        if(key_released(KEY_SELECT) && notePressed[7]) {
-            sappy_stop_note(7);
-            notePressed[7] = 0;
+        if(key_hit(KEY_SELECT)) {
+            // Stop all channels
+            for(int i = 0; i < SND_MAX_CHANNELS; i++) {
+                sndChannel[i].data = 0;
+            }
         }
     }
     
