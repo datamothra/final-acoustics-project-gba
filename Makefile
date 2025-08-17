@@ -35,7 +35,7 @@ BUILD           :=  build
 # Use the user's proven absolute Butano path [[memory:4375848]]
 LIBBUTANO       :=  /Users/drewatz/Code/butano/butano
 PYTHON          :=  python3
-SOURCES         :=  src
+SOURCES         :=  src tonc_audio
 INCLUDES        :=  include
 DATA            :=
 GRAPHICS        :=  graphics
@@ -46,7 +46,7 @@ DMGAUDIO        :=  dmg_audio
 DMGAUDIOBACKEND :=  default
 ROMTITLE        :=  FINALPROJECT
 ROMCODE         :=  FINA
-USERFLAGS       :=  -DBN_CFG_AUDIO_MIXING_RATE=BN_AUDIO_MIXING_RATE_21_KHZ -DBN_CFG_AUDIO_STEREO=true
+USERFLAGS       :=  -DBN_CFG_AUDIO_MIXING_RATE=BN_AUDIO_MIXING_RATE_21_KHZ -DBN_CFG_AUDIO_STEREO=true -DBN_ROM_AUDIO_DATA_SECTION
 USERCXXFLAGS    :=
 USERASFLAGS     :=
 USERLDFLAGS     :=

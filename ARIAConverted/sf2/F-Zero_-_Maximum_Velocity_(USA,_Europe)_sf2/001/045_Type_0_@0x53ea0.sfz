@@ -1,0 +1,79 @@
+/*
+// **********************************************************************
+// Converted with SF22SFZ Converter v1.929
+// Copyright Jan 11 2021 , Plogue Art et Technologie, Inc
+// **********************************************************************
+// Conversion Date: Sun Aug 17 00:15:41 2025
+// **********************************************************************
+// Parent file    : /Users/drewatz/Desktop/New Folder With Items/F-Zero - Maximum Velocity (USA, Europe)/F-Zero - Maximum Velocity (USA, Europe).sf2
+// Soundfont      : 2.1
+// Internal Name  : Unnamed
+// Optimised for  : EMU8000
+// Sound Engineer : Nintendo Game Boy Advance SoundFont
+// Copyright      : Ripped with SF2Ripper v0.0 (c) 2012 by Bregalad
+*/
+
+<control>
+ hint_load_method=1
+ default_path=../
+ set_cc1=0     //Power-on Default Values: Modulation
+ set_cc11=127  //Power-on Default Values: Expression
+ set_cc64=0    //Power-on Default Values: Sustain Pedal
+
+<global>
+ sample=sf2_smpl.wav
+ //8.4.2 MIDI Note-On Velocity to Filter Cutoff
+ //8.4.8 MIDI Continuous Controller 91 to Reverb Effects Send
+ //8.4.9 MIDI Continuous Controller 93 to Chorus Effects Send
+ //8.4.10 MIDI Pitch Wheel to Initial Pitch Controlled by MIDI Pitch Wheel Sensitivity
+ lfo06_wave=0
+ lfo06_pitch=0 lfo06_pitch_oncc129=50 lfo06_pitch_oncc1=50
+ lfo06_freq=8.176
+
+ amplitude_oncc11=100 amplitude_curvecc11=7
+
+
+<master>
+ global_volume=-4
+<region>
+ ampeg_sustain=0.001
+ ampeg_decay=8.44638
+ loop_mode=loop_continuous
+ region_label=Sample @0xd2848
+ //Sample Rate override main:44100 curr:10512
+ pitch_keycenter=88 tune=-2483 offset=3695622 end=3696433
+ loop_start=3696049 loop_end=3696424
+
+
+
+
+
+
+<curve>//7 GMCurves::ConvaveLin
+ v000=0            v001=6.20001e-05  v002=0.000248     v003=0.000558001  v004=0.000992002 
+ v005=0.00155      v006=0.002232     v007=0.00303801   v008=0.00396801   v009=0.00502201  
+ v010=0.00620001   v011=0.00750202   v012=0.00892802   v013=0.010478     v014=0.012152    
+ v015=0.01395      v016=0.015872     v017=0.017918     v018=0.020088     v019=0.022382    
+ v020=0.0248       v021=0.0273421    v022=0.0300081    v023=0.0327981    v024=0.0357121   
+ v025=0.0387501    v026=0.0419121    v027=0.0451981    v028=0.0486081    v029=0.0521421   
+ v030=0.0558001    v031=0.0595821    v032=0.0634881    v033=0.0675181    v034=0.0716721   
+ v035=0.0759502    v036=0.0803522    v037=0.0848782    v038=0.0895282    v039=0.0943022   
+ v040=0.0992002    v041=0.104222     v042=0.109368     v043=0.114638     v044=0.120032    
+ v045=0.12555      v046=0.131192     v047=0.136958     v048=0.142848     v049=0.148862    
+ v050=0.155        v051=0.161262     v052=0.167648     v053=0.174158     v054=0.180792    
+ v055=0.18755      v056=0.194432     v057=0.201438     v058=0.208568     v059=0.215822    
+ v060=0.2232       v061=0.230702     v062=0.238328     v063=0.246078     v064=0.253953    
+ v065=0.261951     v066=0.270073     v067=0.278319     v068=0.286689     v069=0.295183    
+ v070=0.303801     v071=0.312543     v072=0.321409     v073=0.330399     v074=0.339513    
+ v075=0.348751     v076=0.358113     v077=0.367599     v078=0.377209     v079=0.386943    
+ v080=0.396801     v081=0.406783     v082=0.416889     v083=0.427119     v084=0.437473    
+ v085=0.447951     v086=0.458553     v087=0.469279     v088=0.480129     v089=0.491103    
+ v090=0.502201     v091=0.513423     v092=0.524769     v093=0.536239     v094=0.547833    
+ v095=0.559551     v096=0.571393     v097=0.583359     v098=0.595449     v099=0.607663    
+ v100=0.620001     v101=0.632463     v102=0.645049     v103=0.657759     v104=0.670593    
+ v105=0.683551     v106=0.696633     v107=0.709839     v108=0.723169     v109=0.736623    
+ v110=0.750202     v111=0.763904     v112=0.77773      v113=0.79168      v114=0.805754    
+ v115=0.819952     v116=0.834274     v117=0.84872      v118=0.86329      v119=0.877984    
+ v120=0.892802     v121=0.907744     v122=0.92281      v123=0.938        v124=0.953314    
+ v125=0.968752     v126=0.984314     v127=1           
+

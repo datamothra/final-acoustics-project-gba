@@ -1,46 +1,37 @@
 #include "bn_core.h"
 #include "bn_regular_bg_ptr.h"
 #include "bn_regular_bg_items_title.h"
-#include "bn_sound.h"
-#include "bn_fixed.h"
 #include "bn_keypad.h"
-#include "bn_sound_items.h"
+#include "tonc.h"
 
 int main()
 {
 	bn::core::init();
 	bn::regular_bg_ptr bg = bn::regular_bg_items::title.create_bg(0, 0);
 
-	// Single continuous noise: play once, no panning.
-	bn::fixed target_volume = bn::fixed(0.8);
-	bn::sound::set_master_volume(0); // fade in
-
-	bn::sound_handle noise = bn::sound_items::white_noise.play(bn::fixed(1), bn::fixed(1), bn::fixed(0));
+	// Enable sound system
+	REG_SOUNDCNT_X = SSTAT_ENABLE;
+	
+	// Enable noise channel (channel 4) output to both L and R, max volume
+	REG_SOUNDCNT_L = SDMG_BUILD(0, 0, 7, 7) | (1 << 15) | (1 << 11); // Noise to L and R
+	
+	// Set DMG volume to 100%
+	REG_SOUNDCNT_H = SDS_DMG100;
 
 	while(true)
 	{
-		// Keep a single instance alive; if it ends, restart seamlessly (no panning)
-		if(noise.active())
+		// Trigger noise on B press
+		if(bn::keypad::b_pressed())
 		{
-			// no-op
+			// Configure noise channel
+			// Envelope: initial volume 15, decay, step time 3
+			REG_SOUND4CNT_L = SSQR_ENV_BUILD(15, 1, 3);
+			
+			// Frequency: 7-bit mode (white noise), divider 0, shift 2
+			// SFREQ_RESET triggers the sound
+			REG_SOUND4CNT_H = SFREQ_RESET | (0 << 3) | (2 << 4) | (0 << 7);
 		}
-		else
-		{
-			noise = bn::sound_items::white_noise.play(bn::fixed(1), bn::fixed(1), bn::fixed(0));
-		}
-
-		// Fade in master volume towards target
-		bn::fixed mv = bn::sound::master_volume();
-		if(mv < target_volume)
-		{
-			mv += bn::fixed(0.004);
-			if(mv > target_volume)
-			{
-				mv = target_volume;
-			}
-			bn::sound::set_master_volume(mv);
-		}
-
+		
 		bn::core::update();
 	}
 }
