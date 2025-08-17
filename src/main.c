@@ -1,5 +1,6 @@
 #include "tonc.h"
 #include "Sound.h"
+#include "title.h"
 
 // Simple sine wave sample for testing (256 samples, one period)
 const s8 sineWaveData[] = {
@@ -22,9 +23,7 @@ const s8 sineWaveData[] = {
     -22, -19, -16, -12, -9, -6, -3
 };
 
-// External background data (if exists)
-extern const unsigned short titleBitmap[];
-extern const unsigned short titlePal[];
+// External background data provided by grit
 
 // VBlank interrupt handler
 void vblank_handler(void) {
@@ -38,16 +37,12 @@ int main(void) {
     irq_add(II_VBLANK, vblank_handler);
     
     // Try to set up background image if it exists
-    // Using mode 3 for simplicity (240x160 16-bit bitmap)
+    // Using mode 3 for 240x160 16-bit bitmap
     REG_DISPCNT = DCNT_MODE3 | DCNT_BG2;
-    
-    // If we have the background image data, copy it
-    // The title.bmp should have been converted to a C array
-    // For now, just fill with a color to show something
+
+    // Copy converted linear bitmap (Mode 3): titleBitmapLen is bytes, dma3_cpy expects bytes
     u16 *vram = (u16*)MEM_VRAM;
-    for(int i = 0; i < 240*160; i++) {
-        vram[i] = CLR_NAVY;  // Dark blue background
-    }
+    dma3_cpy(vram, titleBitmap, titleBitmapLen);
     
     // Initialize sound system
     SndInit();
@@ -63,52 +58,64 @@ int main(void) {
         // Update input
         key_poll();
         
-        // Mix audio for next frame
+        // Mix audio for next frame (Deku Day 2 pattern)
         SndMix();
         
-        // Handle input - play notes on button press
-        if(key_hit(KEY_A)) {
-            // Play middle C (261 Hz)
-            sndChannel[0].data = 0;  // Stop first
-            sndChannel[0].pos = 0;
-            sndChannel[0].inc = (261 << 12) / 18157;  // Frequency to increment
-            sndChannel[0].vol = 64;  // Max volume
-            sndChannel[0].length = 256 << 12;  // Sample length
-            sndChannel[0].loopLength = 256 << 12;  // Loop the whole sample
-            sndChannel[0].data = (s8*)sineWaveData;  // Start playing
+        // Handle input - notes play while held
+        // Channel 0: A - C (261 Hz)
+        if(key_is_down(KEY_A)) {
+            if(sndChannel[0].data == 0) {
+                sndChannel[0].pos = 0;
+                sndChannel[0].inc = (261 * (256 << 12)) / 18157;
+                sndChannel[0].vol = 64;
+                sndChannel[0].length = 256 << 12;
+                sndChannel[0].loopLength = 256 << 12;
+                sndChannel[0].data = (s8*)sineWaveData;
+            }
+        } else if(sndChannel[0].data != 0) {
+            sndChannel[0].data = 0; // stop when released
         }
-        
-        if(key_hit(KEY_B)) {
-            // Play D (293 Hz)
+
+        // Channel 1: B - D (293 Hz)
+        if(key_is_down(KEY_B)) {
+            if(sndChannel[1].data == 0) {
+                sndChannel[1].pos = 0;
+                sndChannel[1].inc = (293 * (256 << 12)) / 18157;
+                sndChannel[1].vol = 64;
+                sndChannel[1].length = 256 << 12;
+                sndChannel[1].loopLength = 256 << 12;
+                sndChannel[1].data = (s8*)sineWaveData;
+            }
+        } else if(sndChannel[1].data != 0) {
             sndChannel[1].data = 0;
-            sndChannel[1].pos = 0;
-            sndChannel[1].inc = (293 << 12) / 18157;
-            sndChannel[1].vol = 64;
-            sndChannel[1].length = 256 << 12;
-            sndChannel[1].loopLength = 256 << 12;
-            sndChannel[1].data = (s8*)sineWaveData;
         }
-        
-        if(key_hit(KEY_LEFT)) {
-            // Play E (329 Hz)
+
+        // Channel 2: LEFT - E (329 Hz)
+        if(key_is_down(KEY_LEFT)) {
+            if(sndChannel[2].data == 0) {
+                sndChannel[2].pos = 0;
+                sndChannel[2].inc = (329 * (256 << 12)) / 18157;
+                sndChannel[2].vol = 64;
+                sndChannel[2].length = 256 << 12;
+                sndChannel[2].loopLength = 256 << 12;
+                sndChannel[2].data = (s8*)sineWaveData;
+            }
+        } else if(sndChannel[2].data != 0) {
             sndChannel[2].data = 0;
-            sndChannel[2].pos = 0;
-            sndChannel[2].inc = (329 << 12) / 18157;
-            sndChannel[2].vol = 64;
-            sndChannel[2].length = 256 << 12;
-            sndChannel[2].loopLength = 256 << 12;
-            sndChannel[2].data = (s8*)sineWaveData;
         }
-        
-        if(key_hit(KEY_RIGHT)) {
-            // Play F (349 Hz)
+
+        // Channel 3: RIGHT - F (349 Hz)
+        if(key_is_down(KEY_RIGHT)) {
+            if(sndChannel[3].data == 0) {
+                sndChannel[3].pos = 0;
+                sndChannel[3].inc = (349 * (256 << 12)) / 18157;
+                sndChannel[3].vol = 64;
+                sndChannel[3].length = 256 << 12;
+                sndChannel[3].loopLength = 256 << 12;
+                sndChannel[3].data = (s8*)sineWaveData;
+            }
+        } else if(sndChannel[3].data != 0) {
             sndChannel[3].data = 0;
-            sndChannel[3].pos = 0;
-            sndChannel[3].inc = (349 << 12) / 18157;
-            sndChannel[3].vol = 64;
-            sndChannel[3].length = 256 << 12;
-            sndChannel[3].loopLength = 256 << 12;
-            sndChannel[3].data = (s8*)sineWaveData;
         }
         
         if(key_hit(KEY_SELECT)) {

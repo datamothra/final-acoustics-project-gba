@@ -78,7 +78,7 @@ void SndMix(void) {
     s32 i, curChn;
     
     // 16-bit intermediate buffer to reduce quantization noise
-    s16 tempBuffer[304];
+    static s16 tempBuffer[304];
     
     // Zero the buffer
     memset(tempBuffer, 0, 304 * sizeof(s16));
@@ -92,7 +92,7 @@ void SndMix(void) {
             // Mix this channel's data into the intermediate buffer
             for (i = 0; i < sndVars.mixBufferSize; i++) {
                 // Mix a sample into the intermediate buffer
-                tempBuffer[i] += chnPtr->data[chnPtr->pos >> 12] * chnPtr->vol;
+                tempBuffer[i] += (s16)chnPtr->data[chnPtr->pos >> 12] * (s16)chnPtr->vol;
                 chnPtr->pos += chnPtr->inc;
                 
                 // Handle looping or stopping at the end

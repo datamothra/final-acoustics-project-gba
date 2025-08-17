@@ -25,7 +25,7 @@ TARGET		:=	Fuck
 BUILD		:=	build
 SOURCES		:=	src
 DATA		:=	data
-INCLUDES	:=	include
+INCLUDES	:=	include graphics
 GRAPHICS	:=	graphics
 
 #---------------------------------------------------------------------------------
@@ -69,11 +69,12 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+			$(foreach dir,$(DATA),$(CURDIR)/$(dir)) \
+			$(CURDIR)/$(GRAPHICS)
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
-CFILES		:=	main.c Sound.c
+CFILES		:=	main.c Sound.c title.c
 CPPFILES	:=	
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
