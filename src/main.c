@@ -1,6 +1,8 @@
 #include "tonc.h"
 #include "Sound.h"
 #include "title.h"
+#include "EngineSound.h"
+#include "car_front.h"
 
 // Simple sine wave sample for testing (256 samples, one period)
 const s8 sineWaveData[] = {
@@ -46,6 +48,17 @@ int main(void) {
     
     // Initialize sound system
     SndInit();
+
+    // Prepare front sample from embedded raw (unsigned -> signed)
+    static s8 carFront[4096];
+    static bool inited=false;
+    if(!inited){
+        for(size_t i=0;i<audio_car_front_raw_len && i<sizeof(carFront);i++) carFront[i]=(s8)((int)audio_car_front_raw[i]-128);
+        inited=true;
+    }
+    // Rear is pitched-down a fifth (3/2 -> 2/3 frequency). We'll apply via targetFreq later
+    EngineSound_init((const s8*)carFront, (const s8*)carFront,
+                     (u32)audio_car_front_raw_len, 0, (u32)audio_car_front_raw_len, 22050);
     
     // Enable interrupts
     REG_IME = 1;
@@ -104,19 +117,7 @@ int main(void) {
             sndChannel[2].data = 0;
         }
 
-        // Channel 3: RIGHT - F (349 Hz)
-        if(key_is_down(KEY_RIGHT)) {
-            if(sndChannel[3].data == 0) {
-                sndChannel[3].pos = 0;
-                sndChannel[3].inc = (349 * (256 << 12)) / 18157;
-                sndChannel[3].vol = 64;
-                sndChannel[3].length = 256 << 12;
-                sndChannel[3].loopLength = 256 << 12;
-                sndChannel[3].data = (s8*)sineWaveData;
-            }
-        } else if(sndChannel[3].data != 0) {
-            sndChannel[3].data = 0;
-        }
+        // Reserve channel 3 for engine sound demo
         
         if(key_hit(KEY_SELECT)) {
             // Stop all channels
@@ -124,6 +125,11 @@ int main(void) {
                 sndChannel[i].data = 0;
             }
         }
+
+        // Demo: press START to run a simple pass-by sweep on channel 0
+        static u32 demoFrame=0; static bool demoOn=false;
+        if(key_hit(KEY_START)) { demoOn = !demoOn; demoFrame=0; }
+        if(demoOn){ EngineSound_demo_update_passby(demoFrame++, 180); if(demoFrame>240) demoOn=false; }
     }
     
     return 0;
