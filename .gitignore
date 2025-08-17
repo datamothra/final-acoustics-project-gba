@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+*.elf
+*.gba
+*.map
+
+# Temporary files
+*.tmp
+*.temp
+_bn_*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
