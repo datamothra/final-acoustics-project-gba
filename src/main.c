@@ -202,8 +202,10 @@ int main(void) {
                     u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
                     EngineSound_start(wasFront, volume, targetHz);
                 } else {
-                    // Just update volume, keep playing current sample
-                    EngineSound_update_volume(volume);
+                    // Update volume AND maintain correct pitch for current sample
+                    // Use same approach as demo - always pass correct Hz
+                    u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                    EngineSound_update(volume, targetHz);
                 }
             } else {
                 // Volume is 0, stop playing
