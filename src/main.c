@@ -136,6 +136,10 @@ int main(void) {
             const int MAX_VEL = 8;
             const float FRICTION = 0.85f;
             
+            // Store previous position to detect if we're actually moving
+            static int prevX = 120;
+            static int prevY = 80;
+            
             if(key_is_down(KEY_LEFT))  velX -= ACCEL;
             if(key_is_down(KEY_RIGHT)) velX += ACCEL;
             if(key_is_down(KEY_UP))    velY -= ACCEL;
@@ -161,6 +165,11 @@ int main(void) {
             if(manualY < 0) { manualY = 0; velY = 0; }
             if(manualY > 159) { manualY = 159; velY = 0; }
             
+            // Check if position actually changed significantly
+            int dx = (manualX > prevX) ? (manualX - prevX) : (prevX - manualX);
+            int dy = (manualY > prevY) ? (manualY - prevY) : (prevY - manualY);
+            bool positionChanged = (dx > 2) || (dy > 2);
+            
             // Calculate audio parameters from position
             // X-axis: panning (0=left, 120=center, 240=right)
             u32 panL = (manualX <= 120) ? 64 : (64 * (240 - manualX) / 120);
@@ -175,43 +184,53 @@ int main(void) {
                 volume = ((160 - manualY) * 64) / 80;  // 64 at center, 0 at bottom
             }
             
-            // Apply to engine sound (only update, don't restart)
-            EngineSound_set_pan(panL, panR);
-            
-            // Only start if not already playing, otherwise just update
+            // Only update sound if position changed OR it's time for periodic update
+            static u32 updateCounter = 0;
             static bool wasPlaying = false;
             static bool wasFront = true;  // Start with front sample
             
-            // Add hysteresis for sample switching - only switch if we move far from center
-            // This prevents rapid switching when hovering around the center line
-            bool shouldBeFront = (manualY < 70);  // Switch to front when well above center
-            bool shouldBeBack = (manualY > 90);   // Switch to back when well below center
-            // If in the dead zone (70-90), keep current sample
+            // Update panning immediately for responsiveness
+            EngineSound_set_pan(panL, panR);
             
-            if(volume > 0) {
-                if(!wasPlaying) {
-                    // Starting fresh - use position to determine sample
-                    bool useFront = (manualY < 80);
-                    u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
-                    EngineSound_start(useFront, volume, targetHz);
-                    wasPlaying = true;
-                    wasFront = useFront;
-                } else if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
-                    // Only switch samples when crossing hysteresis thresholds
-                    wasFront = !wasFront;
-                    u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
-                    EngineSound_start(wasFront, volume, targetHz);
+            // Only update sound engine at reasonable intervals
+            // Update every 30 frames (0.5 seconds) when static, or when moved significantly
+            updateCounter++;
+            bool shouldUpdateSound = positionChanged || (updateCounter >= 30) || !wasPlaying;
+            
+            if(shouldUpdateSound) {
+                updateCounter = 0;
+                prevX = manualX;
+                prevY = manualY;
+                
+                // Add hysteresis for sample switching - only switch if we move far from center
+                bool shouldBeFront = (manualY < 70);  // Switch to front when well above center
+                bool shouldBeBack = (manualY > 90);   // Switch to back when well below center
+                
+                if(volume > 0) {
+                    if(!wasPlaying) {
+                        // Starting fresh - use position to determine sample
+                        bool useFront = (manualY < 80);
+                        u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
+                        EngineSound_start(useFront, volume, targetHz);
+                        wasPlaying = true;
+                        wasFront = useFront;
+                    } else if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
+                        // Only switch samples when crossing hysteresis thresholds
+                        wasFront = !wasFront;
+                        u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                        EngineSound_start(wasFront, volume, targetHz);
+                    } else if(positionChanged) {
+                        // Only update volume if we actually moved
+                        u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                        EngineSound_update(volume, targetHz);
+                    }
+                    // If no position change and not switching samples, don't update at all
                 } else {
-                    // Update volume AND maintain correct pitch for current sample
-                    // Use same approach as demo - always pass correct Hz
-                    u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
-                    EngineSound_update(volume, targetHz);
-                }
-            } else {
-                // Volume is 0, stop playing
-                if(wasPlaying) {
-                    EngineSound_stop();
-                    wasPlaying = false;
+                    // Volume is 0, stop playing
+                    if(wasPlaying) {
+                        EngineSound_stop();
+                        wasPlaying = false;
+                    }
                 }
             }
             
