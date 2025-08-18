@@ -1,0 +1,107 @@
+GBA Engine Audio: Design, Issues, and Fixes
+
+1) Overview (What We Built)
+- Pure Tonc-based PCM audio using Direct Sound A/B (stereo)
+- Mixer runs once per frame at ~31536 Hz (Sappy standard rate 9)
+- Stereo double buffering; DMA1 streams FIFO A (left), DMA2 streams FIFO B (right)
+- Linear interpolation per channel with 12.12 fixed-point stepping
+- Per-channel ILD panning (panL/panR in 0..64) and volume (0..64)
+- EngineSound module for the F-Zero-style engine:
+  - Front sample (native pitch) and back sample (2/3 pitch)
+  - Start/update/stop without retriggering (unless switching sample side)
+  - Demo pass-by sweep (START)
+  - Manual XY controller (A) with live panning and volume mapping
+
+2) Hardware Path (Succinct)
+- REG_SOUNDCNT_X = SSTAT_ENABLE: Master sound on
+- REG_SOUNDCNT_H = SDS_A100 | SDS_B100 | SDS_AL | SDS_BR | SDS_ATMR0 | SDS_BTMR0:
+  - Route Direct Sound A to left, B to right; both clocked by Timer 0
+- REG_SOUNDBIAS = 0x0200: Better DAC headroom/noise on hardware
+- Timer0 ≈ 31536 Hz: REG_TM0D = 65536 - (16777216 / 31536); REG_TM0CNT = TM_ENABLE
+- DMA1->FIFO A; DMA2->FIFO B; repeat FIFO mode; DMA restarted on buffer swap
+
+3) Mixer Internals (src/Sound.c)
+- Buffers: Two halves per channel (left/right), BUFFER_SIZE ≈ 526 samples per frame
+- Per-frame mix:
+  - Zero 32-bit accumulators for left/right
+  - For each channel, for each output sample:
+    - Read current sample index: idx = pos >> 12; frac = pos & 0xFFF
+    - Linear interpolation v = s0 + ((s1-s0)*frac >> 12)
+    - Accumulate to L/R using vol and pan gains
+    - Advance pos by inc (12.12)
+    - If pos exceeds length: wrap by loopLength (or stop if not looping)
+  - Downscale with rounding to signed 8-bit; clamp [-128,127]
+- SndVSync: swaps which buffer is streamed vs mixed; restarts DMA for the new source buffer
+
+4) EngineSound Module (src/EngineSound.c)
+- Dedicated mixer channel (ENG_CH)
+- Keeps pointers to front/back sample data, loop, and base rate
+- start(useFront, vol, hz): sets data, sets pos = 0, length/loopLength, pan, increment, and marks active
+- update(vol, hz): adjusts volume and pitch (increment) without retriggering
+- update_volume(vol): adjusts only volume (keeps increment/pitch)
+- demo_update_passby(frame, range):
+  - Volume ramps up to midpoint then down
+  - Switches front/back once at the midpoint
+  - Uses update() in steady state to avoid restarts
+
+5) Controls (src/main.c)
+- START: run demo pass-by; B toggles direction; L/R pan sweeps
+- A: toggle manual mode
+- Manual mode (XY):
+  - X: panning (left/right)
+  - Y: front/back selection + a triangular volume curve (full at center line)
+  - SELECT: reset to center
+
+6) The Manual-Mode Stutter: Root Cause
+Symptom
+- Audio in manual mode sounded choppy/zippery even when the dot wasn’t moving.
+
+Diagnosis
+- We were redrawing the entire 240x160 Mode 3 background each frame in manual mode using dma3_cpy.
+- Audio at ~31.5 kHz uses continuous DMA to the sound FIFOs. A full-screen VRAM copy per frame heavily loads the bus and can stall/underrun the audio FIFO, producing audible glitches.
+- The demo (START) path sounded fine because it wasn’t doing heavy per-frame VRAM DMA, so audio DMA wasn’t starved.
+
+Conclusion
+- The audio path and pitch math were correct; the stutter came from VRAM bandwidth contention with per-frame full-screen DMA.
+
+7) The Fix That Worked
+VRAM/Visuals
+- Removed the full-screen `dma3_cpy` in manual mode.
+- Drew the center reference dot (white, 3x3) once on entering manual mode; restore it on exit.
+- For the green position dot (current XY):
+  - Save the underlying 3x3 pixels
+  - When the dot moves: restore the old 3x3, draw the new 3x3, and save the new background
+  - When static: do nothing (no VRAM writes)
+
+Audio Updates
+- Only touch the audio engine when something actually changes:
+  - Start from silence using the current side (front/back) and appropriate Hz
+  - Switch samples (front↔back) only when crossing hysteresis thresholds around the center line (dead zone), to avoid rapid retiggers
+  - Update volume only on meaningful position change; keep pitch unless deliberately switching sample side
+  - When static: don’t call update functions at all — let the channel play
+
+Result
+- VRAM bandwidth is minimized; the audio FIFO DMA is no longer starved
+- Audio is smooth and continuous; manual mode feels responsive without breaking the stream
+
+8) Why the Other Attempts Weren’t the Culprit
+- Pitch math at 31536 Hz vs 22050 Hz was correct (increment computed as (targetHz<<12)/31536)
+- Looping from the beginning of the full sample is correct; the zippering wasn’t a loop click but a FIFO starvation artifact
+- We already reduced logic churn (hysteresis and update-on-change), but the dominant factor was the full-screen VRAM DMA every frame
+
+9) Current Configuration Summary
+- Mix rate: 31536 Hz (Sappy rate 9)
+- Buffer size: ~526 samples per channel per frame
+- Stereo: Direct Sound A→Left, B→Right via DMA1/DMA2
+- Interpolation: linear; no wrap of last→first in the interpolant
+- Panning: ILD gains per channel (0..64)
+- Visuals: Mode 3; manual UI uses minimal 3x3 pixel updates only on movement
+
+10) Practical Tips / Future Work
+- Keep VRAM DMA light during audio playback (especially at higher rates)
+- If switching front/back while moving still ticks, add a tiny crossfade window (e.g., 16–32 samples)
+- Optional: dithering when downmixing to 8-bit to further reduce quantization noise (CPU tradeoff)
+- If higher visual bandwidth is needed, decimate redraws to every N frames or use smaller regions/objects
+
+In Short
+The mixer and engine logic were fine; the manual-mode stutter came from heavy per-frame VRAM copies. Switching to tiny, movement-only redraws removed contention with audio DMA, restoring smooth playback.
