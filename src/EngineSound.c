@@ -63,6 +63,15 @@ void EngineSound_update(u32 volume0to64, u32 targetFreqHz)
     ch->panL = s_panL; ch->panR = s_panR;
 }
 
+void EngineSound_update_volume(u32 volume0to64)
+{
+    SOUND_CHANNEL *ch = &sndChannel[ENG_CH];
+    if(!s_active || ch->data==0) return;
+    // Only update volume, don't touch increment (pitch)
+    ch->vol = (volume0to64 > 64) ? 64 : volume0to64;
+    ch->panL = s_panL; ch->panR = s_panR;
+}
+
 void EngineSound_stop(void)
 {
     sndChannel[ENG_CH].data = 0;
