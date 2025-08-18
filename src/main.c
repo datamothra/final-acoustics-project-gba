@@ -176,10 +176,31 @@ int main(void) {
                 volume = ((160 - manualY) * 64) / 80;  // 64 at center, 0 at bottom
             }
             
-            // Apply to engine sound
+            // Apply to engine sound (only update, don't restart)
             EngineSound_set_pan(panL, panR);
             u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);  // Rear is pitched down
-            EngineSound_start(useFront, volume, targetHz);
+            
+            // Only start if not already playing, otherwise just update
+            static bool wasPlaying = false;
+            static bool wasFront = false;
+            
+            if(volume > 0) {
+                if(!wasPlaying || wasFront != useFront) {
+                    // Start or switch samples
+                    EngineSound_start(useFront, volume, targetHz);
+                    wasPlaying = true;
+                    wasFront = useFront;
+                } else {
+                    // Just update volume and pitch without restarting
+                    EngineSound_update(volume, targetHz);
+                }
+            } else {
+                // Volume is 0, stop playing
+                if(wasPlaying) {
+                    EngineSound_stop();
+                    wasPlaying = false;
+                }
+            }
             
             // Draw visual feedback
             // Redraw background to clear old dots
