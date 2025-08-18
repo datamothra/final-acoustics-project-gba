@@ -74,8 +74,11 @@ int main(void) {
     static bool manualMode = false;
     static int manualX = 120;  // Center of screen (0-240)
     static int manualY = 80;   // Center of screen (0-160)
-    static int velX = 0;       // X velocity for momentum
-    static int velY = 0;       // Y velocity for momentum
+    // Saved pixels for lightweight dot redraws (avoid full-screen DMA every frame)
+    static u16 savedCenter[9];
+    static bool centerSaved = false;
+    static u16 savedGreen[9];
+    static int savedGreenX = -1, savedGreenY = -1;
     
     // Main loop
     while(1) {
@@ -97,8 +100,6 @@ int main(void) {
             if(manualMode) {
                 manualX = 120;
                 manualY = 80;
-                velX = 0;
-                velY = 0;
             }
             EngineSound_set_pan(64, 64);
             EngineSound_stop();
@@ -121,144 +122,166 @@ int main(void) {
                 // Reset position to center
                 manualX = 120;
                 manualY = 80;
-                velX = 0;
-                velY = 0;
+                // Draw center white dot once and save underlying pixels
+                int idx=0;
+                for(int dy=-1; dy<=1; dy++){
+                    for(int dx=-1; dx<=1; dx++){
+                        int px=120+dx, py=80+dy;
+                        savedCenter[idx] = ((u16*)MEM_VRAM)[py*240+px];
+                        ((u16*)MEM_VRAM)[py*240+px] = RGB15(31,31,31);
+                        idx++;
+                    }
+                }
+                centerSaved = true;
+                // Draw initial green dot and save underlying
+                idx=0;
+                for(int dy=-1; dy<=1; dy++){
+                    for(int dx=-1; dx<=1; dx++){
+                        int px=manualX+dx, py=manualY+dy;
+                        savedGreen[idx] = ((u16*)MEM_VRAM)[py*240+px];
+                        ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0);
+                        idx++;
+                    }
+                }
+                savedGreenX = manualX;
+                savedGreenY = manualY;
             } else {
                 // Exiting manual mode - stop engine
                 EngineSound_stop();
+                // Restore center dot if drawn
+                if(centerSaved){
+                    int idx=0;
+                    for(int dy=-1; dy<=1; dy++){
+                        for(int dx=-1; dx<=1; dx++){
+                            int px=120+dx, py=80+dy;
+                            ((u16*)MEM_VRAM)[py*240+px] = savedCenter[idx++];
+                        }
+                    }
+                    centerSaved=false;
+                }
+                // Restore last green dot area
+                if(savedGreenX>=0){
+                    int idx=0;
+                    for(int dy=-1; dy<=1; dy++){
+                        for(int dx=-1; dx<=1; dx++){
+                            int px=savedGreenX+dx, py=savedGreenY+dy;
+                            ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
+                        }
+                    }
+                    savedGreenX=-1; savedGreenY=-1;
+                }
             }
         }
         
         // Manual control mode
         if(manualMode) {
-            // D-Pad controls with momentum
-            const int ACCEL = 2;
-            const int MAX_VEL = 8;
-            const float FRICTION = 0.85f;
-            
+            // D-Pad direct movement (no momentum)
             // Store previous position to detect if we're actually moving
             static int prevX = 120;
             static int prevY = 80;
             
-            if(key_is_down(KEY_LEFT))  velX -= ACCEL;
-            if(key_is_down(KEY_RIGHT)) velX += ACCEL;
-            if(key_is_down(KEY_UP))    velY -= ACCEL;
-            if(key_is_down(KEY_DOWN))  velY += ACCEL;
-            
-            // Clamp velocity
-            if(velX > MAX_VEL) velX = MAX_VEL;
-            if(velX < -MAX_VEL) velX = -MAX_VEL;
-            if(velY > MAX_VEL) velY = MAX_VEL;
-            if(velY < -MAX_VEL) velY = -MAX_VEL;
-            
-            // Apply velocity
-            manualX += velX;
-            manualY += velY;
-            
-            // Apply friction
-            velX = (int)(velX * FRICTION);
-            velY = (int)(velY * FRICTION);
+            if(key_is_down(KEY_LEFT))  manualX -= 1;
+            if(key_is_down(KEY_RIGHT)) manualX += 1;
+            if(key_is_down(KEY_UP))    manualY -= 1;
+            if(key_is_down(KEY_DOWN))  manualY += 1;
             
             // Clamp position
-            if(manualX < 0) { manualX = 0; velX = 0; }
-            if(manualX > 239) { manualX = 239; velX = 0; }
-            if(manualY < 0) { manualY = 0; velY = 0; }
-            if(manualY > 159) { manualY = 159; velY = 0; }
+            if(manualX < 0) { manualX = 0; }
+            if(manualX > 239) { manualX = 239; }
+            if(manualY < 0) { manualY = 0; }
+            if(manualY > 159) { manualY = 159; }
             
             // Check if position actually changed significantly
             int dx = (manualX > prevX) ? (manualX - prevX) : (prevX - manualX);
             int dy = (manualY > prevY) ? (manualY - prevY) : (prevY - manualY);
-            bool positionChanged = (dx > 2) || (dy > 2);
+            bool positionChanged = (dx >= 1) || (dy >= 1);
             
             // Calculate audio parameters from position
             // X-axis: panning (0=left, 120=center, 240=right)
             u32 panL = (manualX <= 120) ? 64 : (64 * (240 - manualX) / 120);
             u32 panR = (manualX >= 120) ? 64 : (64 * manualX / 120);
             
-            // Y-axis: volume and sample selection with hysteresis
-            // 0 = top (front, quiet), 80 = center (full volume), 160 = bottom (back, quiet)
-            u32 volume;
-            if(manualY <= 80) {
-                volume = (manualY * 64) / 80;  // 0 at top, 64 at center
-            } else {
-                volume = ((160 - manualY) * 64) / 80;  // 64 at center, 0 at bottom
-            }
+            // Volume attenuation by distance from head center (white dot at 120,80)
+            // Farther left/right also reduces volume (radial falloff)
+            // Use a cheap Chebyshev norm approximation to avoid sqrt
+            int absXc = (manualX >= 120) ? (manualX - 120) : (120 - manualX);
+            int absYc = (manualY >= 80)  ? (manualY - 80)  : (80  - manualY);
+            u32 nx = (absXc * 64) / 120;  // 0..64
+            u32 ny = (absYc * 64) / 80;   // 0..64
+            u32 r  = (nx > ny) ? nx : ny; // 0..64
+            u32 volume = (r >= 64) ? 0 : (64 - r);
             
-            // Only update sound if position changed OR it's time for periodic update
-            static u32 updateCounter = 0;
+            // Sound state management
             static bool wasPlaying = false;
             static bool wasFront = true;  // Start with front sample
             
-            // Update panning immediately for responsiveness
+            // Update panning always for responsiveness
             EngineSound_set_pan(panL, panR);
             
-            // Only update sound engine at reasonable intervals
-            // Update every 30 frames (0.5 seconds) when static, or when moved significantly
-            updateCounter++;
-            bool shouldUpdateSound = positionChanged || (updateCounter >= 30) || !wasPlaying;
-            
-            if(shouldUpdateSound) {
-                updateCounter = 0;
-                prevX = manualX;
-                prevY = manualY;
-                
-                // Add hysteresis for sample switching - only switch if we move far from center
-                bool shouldBeFront = (manualY < 70);  // Switch to front when well above center
-                bool shouldBeBack = (manualY > 90);   // Switch to back when well below center
-                
-                if(volume > 0) {
-                    if(!wasPlaying) {
-                        // Starting fresh - use position to determine sample
-                        bool useFront = (manualY < 80);
-                        u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
-                        EngineSound_start(useFront, volume, targetHz);
-                        wasPlaying = true;
-                        wasFront = useFront;
-                    } else if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
-                        // Only switch samples when crossing hysteresis thresholds
+            // Only touch the sound engine when something actually changes
+            if(volume > 0) {
+                if(!wasPlaying) {
+                    // Starting fresh - determine sample and start
+                    bool useFront = (manualY < 80);
+                    u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
+                    EngineSound_start(useFront, volume, targetHz);
+                    wasPlaying = true;
+                    wasFront = useFront;
+                    prevX = manualX;
+                    prevY = manualY;
+                } else {
+                    // Already playing - check if we need to change anything
+                    
+                    // Sample switching with hysteresis based on forward/back (relative to head facing north)
+                    // Above center (smaller Y) = front; below = back
+                    bool shouldBeFront = (manualY < 70);
+                    bool shouldBeBack = (manualY > 90);
+                    
+                    if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
+                        // Switch samples when crossing threshold
                         wasFront = !wasFront;
                         u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
                         EngineSound_start(wasFront, volume, targetHz);
+                        prevX = manualX;
+                        prevY = manualY;
                     } else if(positionChanged) {
-                        // Only update volume if we actually moved
-                        u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
-                        EngineSound_update(volume, targetHz);
+                        // Position changed - update volume only
+                        // Use update_volume to avoid touching pitch
+                        EngineSound_update_volume(volume);
+                        prevX = manualX;
+                        prevY = manualY;
+                        // Update green dot: restore previous then draw new, saving new background
+                        if(savedGreenX>=0){
+                            int idx=0;
+                            for(int dy=-1; dy<=1; dy++){
+                                for(int dx=-1; dx<=1; dx++){
+                                    int px=savedGreenX+dx, py=savedGreenY+dy;
+                                    ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
+                                }
+                            }
+                        }
+                        int idx2=0;
+                        for(int dy=-1; dy<=1; dy++){
+                            for(int dx=-1; dx<=1; dx++){
+                                int px=manualX+dx, py=manualY+dy;
+                                savedGreen[idx2] = ((u16*)MEM_VRAM)[py*240+px];
+                                ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0);
+                                idx2++;
+                            }
+                        }
+                        savedGreenX=manualX; savedGreenY=manualY;
                     }
-                    // If no position change and not switching samples, don't update at all
-                } else {
-                    // Volume is 0, stop playing
-                    if(wasPlaying) {
-                        EngineSound_stop();
-                        wasPlaying = false;
-                    }
+                    // If nothing changed, DO NOTHING - let it play!
+                }
+            } else {
+                // Volume is 0, stop if playing
+                if(wasPlaying) {
+                    EngineSound_stop();
+                    wasPlaying = false;
                 }
             }
             
-            // Draw visual feedback
-            // Redraw background to clear old dots
-            dma3_cpy((u16*)MEM_VRAM, titleBitmap, titleBitmapLen);
-            
-            // Draw white dot at center (reference point) - 3x3 for visibility
-            for(int dy = -1; dy <= 1; dy++) {
-                for(int dx = -1; dx <= 1; dx++) {
-                    int px = 120 + dx;
-                    int py = 80 + dy;
-                    if(px >= 0 && px < 240 && py >= 0 && py < 160) {
-                        ((u16*)MEM_VRAM)[py * 240 + px] = RGB15(31, 31, 31);
-                    }
-                }
-            }
-            
-            // Draw green dot at current position - 3x3 for visibility
-            for(int dy = -1; dy <= 1; dy++) {
-                for(int dx = -1; dx <= 1; dx++) {
-                    int px = manualX + dx;
-                    int py = manualY + dy;
-                    if(px >= 0 && px < 240 && py >= 0 && py < 160) {
-                        ((u16*)MEM_VRAM)[py * 240 + px] = RGB15(0, 31, 0);
-                    }
-                }
-            }
+            // Visual redraws happen only on movement; nothing to do here when static
         } else {
             // Demo mode controls (when not in manual mode)
             
