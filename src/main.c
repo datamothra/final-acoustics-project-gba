@@ -3,6 +3,7 @@
 #include "title.h"
 #include "EngineSound.h"
 #include "car_front.h"
+#include "car_front_smooth.h"
 
 // Simple sine wave sample for testing (256 samples, one period)
 const s8 sineWaveData[] = {
@@ -51,14 +52,18 @@ int main(void) {
 
     // Prepare front sample from embedded raw (unsigned -> signed)
     static s8 carFront[4096];
+    static s8 carFrontSmooth[4096];
     static bool inited=false;
     if(!inited){
         for(size_t i=0;i<audio_car_front_raw_len && i<sizeof(carFront);i++) carFront[i]=(s8)((int)audio_car_front_raw[i]-128);
+        // build smoothed copy (unsigned->signed)
+        for(size_t i=0;i<audio_car_front_smooth_raw_len && i<sizeof(carFrontSmooth);i++) carFrontSmooth[i]=(s8)((int)audio_car_front_smooth_raw[i]-128);
         inited=true;
     }
     // Rear is pitched-down a fifth (3/2 -> 2/3 frequency). We'll apply via targetFreq later
-    EngineSound_init((const s8*)carFront, (const s8*)carFront,
-                     (u32)audio_car_front_raw_len, 0, (u32)audio_car_front_raw_len, 22050);
+    // Use smoothed loop for rear/front (both for now). Loop whole buffer.
+    EngineSound_init((const s8*)carFrontSmooth, (const s8*)carFrontSmooth,
+                     (u32)audio_car_front_smooth_raw_len, 0, (u32)audio_car_front_smooth_raw_len, 22050);
     
     // Enable interrupts
     REG_IME = 1;

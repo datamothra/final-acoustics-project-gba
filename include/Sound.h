@@ -13,13 +13,17 @@ typedef struct _SOUND_CHANNEL {
     u32 pos;        // 12-bit fixed point position
     u32 inc;        // 12-bit fixed point increment  
     u32 vol;        // Volume (0-64)
+    u32 panL;       // Left gain (0-64)
+    u32 panR;       // Right gain (0-64)
     u32 length;     // 12-bit fixed point length
     u32 loopLength; // 12-bit fixed point loop length (0 = no loop)
 } SOUND_CHANNEL;
 
 typedef struct _SOUND_VARS {
-    s8 *mixBufferBase;
-    s8 *curMixBuffer;
+    s8 *mixBufferBase;   // Left buffer base
+    s8 *curMixBuffer;    // Left current buffer
+    s8 *mixBufferBaseR;  // Right buffer base
+    s8 *curMixBufferR;   // Right current buffer
     u32 mixBufferSize;
     u8 activeBuffer;
 } SOUND_VARS;

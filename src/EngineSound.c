@@ -46,6 +46,9 @@ void EngineSound_start(bool useFrontSample, u32 volume0to64, u32 targetFreqHz)
     ch->length = (s_length << 12);
     ch->loopLength = (s_loopLength ? (s_loopLength << 12) : 0);
     ch->data = s_isFront ? (s8*)s_frontData : (s8*)s_rearData;
+    // Slight pan depending on side: front centered, rear slightly behind (bias left then right)
+    ch->panL = s_isFront ? 64 : 48;
+    ch->panR = s_isFront ? 64 : 48;
     set_inc_and_vol(ch, volume0to64, targetFreqHz);
     s_active = true;
 }
