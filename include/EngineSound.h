@@ -21,6 +21,13 @@ void EngineSound_start(bool useFrontSample,
 // Update volume/pitch without re-triggering
 void EngineSound_update(u32 volume0to64, u32 targetFreqHz);
 
+// Set per-source panning gains (0-64). Applies to both rear and front loops.
+void EngineSound_set_pan(u32 panLeft0to64, u32 panRight0to64);
+
+// Set independent front/rear mix (volumes 0-64, frequencies in Hz)
+void EngineSound_set_mix(u32 volFront0to64, u32 volRear0to64,
+                         u32 frontFreqHz, u32 rearFreqHz);
+
 void EngineSound_stop(void);
 
 // Optional demo update: simple approach/pass-by/away envelope

@@ -131,10 +131,10 @@ int main(void) {
             }
         }
 
-        // Demo: press START to run a simple pass-by sweep on channel 0
+        // Demo: press START to run a simple gradual pass-by (center panned)
         static u32 demoFrame=0; static bool demoOn=false;
-        if(key_hit(KEY_START)) { demoOn = !demoOn; demoFrame=0; }
-        if(demoOn){ EngineSound_demo_update_passby(demoFrame++, 180); if(demoFrame>240) demoOn=false; }
+        if(key_hit(KEY_START)) { demoOn = !demoOn; demoFrame=0; EngineSound_set_pan(64,64); }
+        if(demoOn){ EngineSound_demo_update_passby(demoFrame++, 360); if(demoFrame>360){ demoOn=false; EngineSound_stop(); } }
     }
     
     return 0;
