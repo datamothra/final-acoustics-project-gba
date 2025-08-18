@@ -44,7 +44,7 @@ void EngineSound_start(bool useFrontSample, u32 volume0to64, u32 targetFreqHz)
     SOUND_CHANNEL *ch = &sndChannel[ENG_CH];
     s_isFront = useFrontSample;
     ch->data = 0; // stop first
-    ch->pos = (s_loopStart << 12);  // Start at loop point
+    ch->pos = 0;  // Start from beginning of sample, not loop point!
     ch->length = (s_length << 12);  // Use full length
     ch->loopLength = (s_loopLength ? (s_loopLength << 12) : 0);
     ch->data = s_isFront ? (s8*)s_frontData : (s8*)s_rearData;

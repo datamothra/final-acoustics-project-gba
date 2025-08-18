@@ -61,9 +61,9 @@ int main(void) {
         inited=true;
     }
     // Rear is pitched-down a fifth (3/2 -> 2/3 frequency). We'll apply via targetFreq later
-    // Use original longer sample with better loop points
-    u32 loopStart = 1500;  // Start loop partway into sample to skip attack
-    u32 loopLength = audio_car_front_raw_len - loopStart;  // Loop the rest (~1871 samples)
+    // Loop the entire sample for natural engine sound
+    u32 loopStart = 0;  // Loop from beginning
+    u32 loopLength = audio_car_front_raw_len;  // Loop entire sample (3371 samples)
     EngineSound_init((const s8*)carFront, (const s8*)carFront,
                      (u32)audio_car_front_raw_len, loopStart, loopLength, 22050);
     
