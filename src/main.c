@@ -166,9 +166,8 @@ int main(void) {
             u32 panL = (manualX <= 120) ? 64 : (64 * (240 - manualX) / 120);
             u32 panR = (manualX >= 120) ? 64 : (64 * manualX / 120);
             
-            // Y-axis: volume and sample selection
+            // Y-axis: volume and sample selection with hysteresis
             // 0 = top (front, quiet), 80 = center (full volume), 160 = bottom (back, quiet)
-            bool useFront = (manualY < 80);
             u32 volume;
             if(manualY <= 80) {
                 volume = (manualY * 64) / 80;  // 0 at top, 64 at center
@@ -181,17 +180,29 @@ int main(void) {
             
             // Only start if not already playing, otherwise just update
             static bool wasPlaying = false;
-            static bool wasFront = false;
+            static bool wasFront = true;  // Start with front sample
+            
+            // Add hysteresis for sample switching - only switch if we move far from center
+            // This prevents rapid switching when hovering around the center line
+            bool shouldBeFront = (manualY < 70);  // Switch to front when well above center
+            bool shouldBeBack = (manualY > 90);   // Switch to back when well below center
+            // If in the dead zone (70-90), keep current sample
             
             if(volume > 0) {
-                if(!wasPlaying || wasFront != useFront) {
-                    // Start or switch samples - set correct pitch for sample type
-                    u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);  // Rear is pitched down
+                if(!wasPlaying) {
+                    // Starting fresh - use position to determine sample
+                    bool useFront = (manualY < 80);
+                    u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
                     EngineSound_start(useFront, volume, targetHz);
                     wasPlaying = true;
                     wasFront = useFront;
+                } else if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
+                    // Only switch samples when crossing hysteresis thresholds
+                    wasFront = !wasFront;
+                    u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                    EngineSound_start(wasFront, volume, targetHz);
                 } else {
-                    // Just update volume, don't change pitch to avoid speed changes
+                    // Just update volume, keep playing current sample
                     EngineSound_update_volume(volume);
                 }
             } else {
