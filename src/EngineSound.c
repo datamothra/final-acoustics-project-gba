@@ -11,6 +11,7 @@ static u32 s_baseHz = 18157; // default
 static bool s_isFront = true;
 static bool s_active = false;
 static u32 s_panL = 64, s_panR = 64;
+static bool s_frontToBack = true;
 
 // Use channel 0 for engine
 #define ENG_CH 3
@@ -33,7 +34,7 @@ void EngineSound_init(const s8 *rearData,
 static void set_inc_and_vol(SOUND_CHANNEL *ch, u32 volume0to64, u32 targetFreqHz)
 {
     // increment in 12.12 fixed: (targetHz << 12) / mixHz
-    ch->inc = (targetFreqHz << 12) / 18157;
+    ch->inc = (targetFreqHz << 12) / 31536;  // Sappy standard rate
     if(ch->inc == 0) ch->inc = 1;
     ch->vol = (volume0to64 > 64) ? 64 : volume0to64;
 }
@@ -43,8 +44,8 @@ void EngineSound_start(bool useFrontSample, u32 volume0to64, u32 targetFreqHz)
     SOUND_CHANNEL *ch = &sndChannel[ENG_CH];
     s_isFront = useFrontSample;
     ch->data = 0; // stop first
-    ch->pos = 0;
-    ch->length = (s_length << 12);
+    ch->pos = (s_loopStart << 12);  // Start at loop point
+    ch->length = (s_length << 12);  // Use full length
     ch->loopLength = (s_loopLength ? (s_loopLength << 12) : 0);
     ch->data = s_isFront ? (s8*)s_frontData : (s8*)s_rearData;
     // Apply current pan
@@ -79,11 +80,12 @@ void EngineSound_demo_update_passby(u32 frame, u32 rangeT)
 
     u32 half = rangeT/2;
     bool front = frame >= half;
+    if(s_frontToBack)
+        front = !front;  // invert mapping
 
-    // Volume ramps up to midpoint then down (center pan)
+    // Volume ramps up to midpoint then down (pan set externally at start)
     u32 vol = (frame <= half) ? (frame*64/half) : ((rangeT-frame)*64/half);
     if(vol>64) vol=64;
-    s_panL = 64; s_panR = 64;
 
     // Rear: 2/3 rate; Front: native rate
     u32 hz = front ? s_baseHz : (s_baseHz*2)/3;
@@ -94,6 +96,11 @@ void EngineSound_demo_update_passby(u32 frame, u32 rangeT)
         EngineSound_start(front, vol, hz);  // switch sample exactly at apex
     else
         EngineSound_update(vol, hz);
+}
+
+void EngineSound_set_direction(bool frontToBack)
+{
+    s_frontToBack = frontToBack;
 }
 
 void EngineSound_set_pan(u32 panLeft0to64, u32 panRight0to64)

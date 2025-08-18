@@ -108,6 +108,13 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@# Auto-open the built ROM in an emulator if available
+	@if [ -f "$(OUTPUT).gba" ]; then \
+		(open -a "mGBA" "$(OUTPUT).gba" >/dev/null 2>&1) || \
+		(open -a "VisualBoyAdvance-M" "$(OUTPUT).gba" >/dev/null 2>&1) || \
+		(command -v mgba >/dev/null 2>&1 && mgba "$(OUTPUT).gba" >/dev/null 2>&1) || \
+		(command -v open >/dev/null 2>&1 && open "$(OUTPUT).gba" >/dev/null 2>&1) || true; \
+	fi
 
 #---------------------------------------------------------------------------------
 clean:

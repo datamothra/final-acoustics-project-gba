@@ -34,6 +34,9 @@ void EngineSound_stop(void);
 // rangeT is total frames of the demo; frame is current frame 0..rangeT
 void EngineSound_demo_update_passby(u32 frame, u32 rangeT);
 
+// Choose direction of the demo sweep: true = front->back, false = back->front
+void EngineSound_set_direction(bool frontToBack);
+
 #endif // ENGINE_SOUND_H
 
 

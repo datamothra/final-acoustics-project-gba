@@ -61,9 +61,11 @@ int main(void) {
         inited=true;
     }
     // Rear is pitched-down a fifth (3/2 -> 2/3 frequency). We'll apply via targetFreq later
-    // Use smoothed loop for rear/front (both for now). Loop whole buffer.
-    EngineSound_init((const s8*)carFrontSmooth, (const s8*)carFrontSmooth,
-                     (u32)audio_car_front_smooth_raw_len, 0, (u32)audio_car_front_smooth_raw_len, 22050);
+    // Use original longer sample with better loop points
+    u32 loopStart = 1500;  // Start loop partway into sample to skip attack
+    u32 loopLength = audio_car_front_raw_len - loopStart;  // Loop the rest (~1871 samples)
+    EngineSound_init((const s8*)carFront, (const s8*)carFront,
+                     (u32)audio_car_front_raw_len, loopStart, loopLength, 22050);
     
     // Enable interrupts
     REG_IME = 1;
@@ -79,48 +81,7 @@ int main(void) {
         // Mix audio for next frame (Deku Day 2 pattern)
         SndMix();
         
-        // Handle input - notes play while held
-        // Channel 0: A - C (261 Hz)
-        if(key_is_down(KEY_A)) {
-            if(sndChannel[0].data == 0) {
-                sndChannel[0].pos = 0;
-                sndChannel[0].inc = (261 * (256 << 12)) / 18157;
-                sndChannel[0].vol = 64;
-                sndChannel[0].length = 256 << 12;
-                sndChannel[0].loopLength = 256 << 12;
-                sndChannel[0].data = (s8*)sineWaveData;
-            }
-        } else if(sndChannel[0].data != 0) {
-            sndChannel[0].data = 0; // stop when released
-        }
-
-        // Channel 1: B - D (293 Hz)
-        if(key_is_down(KEY_B)) {
-            if(sndChannel[1].data == 0) {
-                sndChannel[1].pos = 0;
-                sndChannel[1].inc = (293 * (256 << 12)) / 18157;
-                sndChannel[1].vol = 64;
-                sndChannel[1].length = 256 << 12;
-                sndChannel[1].loopLength = 256 << 12;
-                sndChannel[1].data = (s8*)sineWaveData;
-            }
-        } else if(sndChannel[1].data != 0) {
-            sndChannel[1].data = 0;
-        }
-
-        // Channel 2: LEFT - E (329 Hz)
-        if(key_is_down(KEY_LEFT)) {
-            if(sndChannel[2].data == 0) {
-                sndChannel[2].pos = 0;
-                sndChannel[2].inc = (329 * (256 << 12)) / 18157;
-                sndChannel[2].vol = 64;
-                sndChannel[2].length = 256 << 12;
-                sndChannel[2].loopLength = 256 << 12;
-                sndChannel[2].data = (s8*)sineWaveData;
-            }
-        } else if(sndChannel[2].data != 0) {
-            sndChannel[2].data = 0;
-        }
+        // Remove note test controls
 
         // Reserve channel 3 for engine sound demo
         
@@ -131,10 +92,82 @@ int main(void) {
             }
         }
 
-        // Demo: press START to run a simple gradual pass-by (center panned)
+        // Demo: press START to run a simple gradual pass-by
+        // Pan selection via D-Pad: LEFT = hard left, UP = center, RIGHT = hard right
+        // L/R: dynamic pan for duration of sweep (L: left->right, R: right->left)
         static u32 demoFrame=0; static bool demoOn=false;
-        if(key_hit(KEY_START)) { demoOn = !demoOn; demoFrame=0; EngineSound_set_pan(64,64); }
-        if(demoOn){ EngineSound_demo_update_passby(demoFrame++, 360); if(demoFrame>360){ demoOn=false; EngineSound_stop(); } }
+        static int panSel = 1; // 0=left, 1=center, 2=right
+        static int panDynamicMode = 0; // 0=none, 1=L->R, 2=R->L
+        static bool nextFrontToBack = false; // false: back->front (default), true: front->back
+
+        // D-Pad for static pan positions
+        if(key_hit(KEY_LEFT)) { 
+            panSel = 0; 
+            panDynamicMode = 0;  // Reset dynamic mode
+            EngineSound_set_pan(64,0); 
+        }
+        if(key_hit(KEY_RIGHT)) { 
+            panSel = 2; 
+            panDynamicMode = 0;  // Reset dynamic mode
+            EngineSound_set_pan(0,64); 
+        }
+        
+        // UP resets to center and stops dynamic panning
+        if(key_hit(KEY_UP)) { 
+            panSel = 1; 
+            panDynamicMode = 0;  // Reset dynamic mode
+            EngineSound_set_pan(64,64); 
+        }
+        
+        // L/R trigger dynamic pan modes (press once, not hold)
+        if(key_hit(KEY_L)) { 
+            panDynamicMode = 1;  // Start L->R sweep
+        }
+        if(key_hit(KEY_R)) { 
+            panDynamicMode = 2;  // Start R->L sweep
+        }
+
+        // B toggles direction for the NEXT sweep only
+        if(key_hit(KEY_B)) nextFrontToBack = !nextFrontToBack;
+
+        if(key_hit(KEY_START)) {
+            if(!demoOn){
+                // starting a new sweep: apply stored direction and current pan
+                EngineSound_set_direction(nextFrontToBack);
+                if(panDynamicMode==0){
+                    if(panSel==0) EngineSound_set_pan(64,0); else if(panSel==1) EngineSound_set_pan(64,64); else EngineSound_set_pan(0,64);
+                }
+                demoFrame=0; demoOn=true;
+            }else{
+                // stopping current sweep
+                demoOn=false; EngineSound_stop();
+            }
+        }
+
+        if(demoOn){
+            // If dynamic pan requested, move across over the sweep duration
+            if(panDynamicMode!=0){
+                const u32 total=360; u32 f = demoFrame<total?demoFrame:total; // clamp
+                // t in [0,1]
+                u32 t_num = f; u32 t_den = total; // integer form
+                // left gain is either (1-t) or t; right is complement
+                u32 left, right;
+                if(panDynamicMode==1){ // L->R
+                    left  = (u32)((64ULL*(t_den - t_num))/t_den);
+                    right = 64 - left;
+                }else{ // R->L
+                    right = (u32)((64ULL*(t_den - t_num))/t_den);
+                    left  = 64 - right;
+                }
+                EngineSound_set_pan(left, right);
+            }
+            EngineSound_demo_update_passby(demoFrame++, 360);
+            if(demoFrame>360){ demoOn=false; EngineSound_stop(); }
+        }
+
+        // A toggles sweep direction: front->back vs back->front
+        static bool dirFTB=false; // false=back->front default
+        if(key_hit(KEY_A)) { dirFTB = !dirFTB; EngineSound_set_direction(dirFTB); }
     }
     
     return 0;
