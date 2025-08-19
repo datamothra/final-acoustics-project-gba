@@ -33,8 +33,8 @@ void Prebaked_enable(bool enable){
 
         const s8* left = (const s8*)pb_table_L[idx];
         const s8* right = (const s8*)pb_table_R[idx];
-        u32 len = PB_LEN; // all buckets same length
-        u32 inc = (SND_MIX_RATE_HZ << 12) / 22050; if(!inc) inc = 1; // play near native 22.05kHz
+        u32 len = PB_LEN; // same as A-mode source length
+        u32 inc = (SND_MIX_RATE_HZ << 12) / 22050; if(!inc) inc = 1; // 22.05kHz target
 
         // Left ear hard left
         sndChannel[PB_LEFT_CH].data = (s8*)left;
