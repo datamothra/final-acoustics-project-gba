@@ -74,7 +74,7 @@ export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
-CFILES		:=	main.c Sound.c EngineSound.c Prebaked.c car_front.c car_front_smooth.c test_sine.c title.c
+CFILES		:=	main.c Sound.c EngineSound.c Prebaked.c car_front.c car_front_smooth.c test_sine.c pb_all.c pb_fixed.c title.c
 CPPFILES	:=	
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))

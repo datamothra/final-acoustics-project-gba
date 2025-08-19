@@ -2,6 +2,7 @@
 #include "Sound.h"
 #include "car_front.h"
 #include "test_sine.h"
+#include "pb_table.h"
 #include <string.h>
 
 // B-mode: True stereo test using two hard-panned channels with different tones
@@ -25,27 +26,35 @@ void Prebaked_enable(bool enable){
         sndChannel[0].data = 0;
         sndChannel[3].data = 0;
 
-        u32 inc = (SND_MIX_RATE_HZ << 12) / SND_MIX_RATE_HZ; if(!inc) inc = 1; // 1:1 at mixer rate
+        // Start centered: azimuth center, front
+        int azIdx = PB_AZ_COUNT/2;
+        int fbIdx = 0;
+        int idx = fbIdx + azIdx*PB_FB_COUNT;
 
-        // Left: 440 Hz sine, hard left
-        sndChannel[PB_LEFT_CH].data = (s8*)test_sine_left;
+        const s8* left = (const s8*)pb_table_L[idx];
+        const s8* right = (const s8*)pb_table_R[idx];
+        u32 len = PB_LEN; // all buckets same length
+        u32 inc = (SND_MIX_RATE_HZ << 12) / 22050; if(!inc) inc = 1; // play near native 22.05kHz
+
+        // Left ear hard left
+        sndChannel[PB_LEFT_CH].data = (s8*)left;
         sndChannel[PB_LEFT_CH].pos = 0;
         sndChannel[PB_LEFT_CH].inc = inc;
         sndChannel[PB_LEFT_CH].vol = 32;
         sndChannel[PB_LEFT_CH].panL = 64;
         sndChannel[PB_LEFT_CH].panR = 0;
-        sndChannel[PB_LEFT_CH].length = TEST_SINE_LEN_LEFT << 12;
-        sndChannel[PB_LEFT_CH].loopLength = TEST_SINE_LEN_LEFT << 12;
+        sndChannel[PB_LEFT_CH].length = len << 12;
+        sndChannel[PB_LEFT_CH].loopLength = len << 12;
 
-        // Right: 660 Hz sine, hard right
-        sndChannel[PB_RIGHT_CH].data = (s8*)test_sine_right;
+        // Right ear hard right
+        sndChannel[PB_RIGHT_CH].data = (s8*)right;
         sndChannel[PB_RIGHT_CH].pos = 0;
         sndChannel[PB_RIGHT_CH].inc = inc;
         sndChannel[PB_RIGHT_CH].vol = 32;
         sndChannel[PB_RIGHT_CH].panL = 0;
         sndChannel[PB_RIGHT_CH].panR = 64;
-        sndChannel[PB_RIGHT_CH].length = TEST_SINE_LEN_RIGHT << 12;
-        sndChannel[PB_RIGHT_CH].loopLength = TEST_SINE_LEN_RIGHT << 12;
+        sndChannel[PB_RIGHT_CH].length = len << 12;
+        sndChannel[PB_RIGHT_CH].loopLength = len << 12;
     } else {
         sndChannel[PB_LEFT_CH].data = 0;
         sndChannel[PB_RIGHT_CH].data = 0;
@@ -54,14 +63,31 @@ void Prebaked_enable(bool enable){
 
 void Prebaked_update_by_position(int x, int y, u32 volume0to64){
     if(!s_enabled) return;
+    // Map X/Y to azimuth/front-back buckets and switch pair cleanly
+    int azIdx = (x < 120) ? ((120 - x) * (PB_AZ_COUNT/2) / 120) : ((x - 120) * (PB_AZ_COUNT/2) / 120 + PB_AZ_COUNT/2);
+    if(azIdx < 0) azIdx = 0; if(azIdx >= PB_AZ_COUNT) azIdx = PB_AZ_COUNT-1;
+    int fbIdx = (y < 80) ? 0 : 1; // 0=front,1=back
+    int idx = fbIdx + azIdx*PB_FB_COUNT;
+
+    const s8* left = (const s8*)pb_table_L[idx];
+    const s8* right = (const s8*)pb_table_R[idx];
+    u32 len = PB_LEN;
+    // If pointer changed, swap at loop boundary by resetting pos together
+    if(sndChannel[PB_LEFT_CH].data != left || sndChannel[PB_RIGHT_CH].data != right){
+        sndChannel[PB_LEFT_CH].data = (s8*)left;
+        sndChannel[PB_RIGHT_CH].data = (s8*)right;
+        sndChannel[PB_LEFT_CH].pos = 0;
+        sndChannel[PB_RIGHT_CH].pos = 0;
+        sndChannel[PB_LEFT_CH].length = len << 12;
+        sndChannel[PB_RIGHT_CH].length = len << 12;
+        sndChannel[PB_LEFT_CH].loopLength = len << 12;
+        sndChannel[PB_RIGHT_CH].loopLength = len << 12;
+    }
     
     // Volume control applies equally to both
     u32 vol = (volume0to64 > 64) ? 64 : volume0to64;
     sndChannel[PB_LEFT_CH].vol = vol;
     sndChannel[PB_RIGHT_CH].vol = vol;
-
-    // Optional: pan crossfade test (commented out for pure stereo)
-    (void)x; (void)y;
 }
 
 void Prebaked_stop(void){
