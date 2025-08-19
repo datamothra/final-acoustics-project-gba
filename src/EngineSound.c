@@ -34,7 +34,7 @@ void EngineSound_init(const s8 *rearData,
 static void set_inc_and_vol(SOUND_CHANNEL *ch, u32 volume0to64, u32 targetFreqHz)
 {
     // increment in 12.12 fixed: (targetHz << 12) / mixHz
-    ch->inc = (targetFreqHz << 12) / 31536;  // Sappy standard rate
+    ch->inc = (targetFreqHz << 12) / SND_MIX_RATE_HZ;  // match mixer rate
     if(ch->inc == 0) ch->inc = 1;
     ch->vol = (volume0to64 > 64) ? 64 : volume0to64;
 }
@@ -118,6 +118,8 @@ void EngineSound_set_pan(u32 panLeft0to64, u32 panRight0to64)
     s_panR = (panRight0to64>64)?64:panRight0to64;
 }
 
+// (no-op) ITD removed for baseline stability
+
 void EngineSound_set_mix(u32 volFront0to64, u32 volRear0to64,
                          u32 frontFreqHz, u32 rearFreqHz)
 {
@@ -131,6 +133,18 @@ void EngineSound_set_mix(u32 volFront0to64, u32 volRear0to64,
         EngineSound_start(front, vol, hz);
     else
         EngineSound_update(vol, hz);
+}
+
+void EngineSound_set_hrtf_params(u16 lpAlpha_fp12,
+                                 u16 gainLowL, u16 gainHighL,
+                                 u16 gainLowR, u16 gainHighR)
+{
+    SOUND_CHANNEL *ch = &sndChannel[ENG_CH];
+    ch->lpAlpha   = lpAlpha_fp12;
+    ch->gainLowL  = (gainLowL  > 64) ? 64 : gainLowL;
+    ch->gainHighL = (gainHighL > 64) ? 64 : gainHighL;
+    ch->gainLowR  = (gainLowR  > 64) ? 64 : gainLowR;
+    ch->gainHighR = (gainHighR > 64) ? 64 : gainHighR;
 }
 
 

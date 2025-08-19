@@ -27,6 +27,13 @@ void EngineSound_update_volume(u32 volume0to64);
 // Set per-source panning gains (0-64). Applies to both rear and front loops.
 void EngineSound_set_pan(u32 panLeft0to64, u32 panRight0to64);
 
+// Configure simple per-ear 2-band gains and LP alpha (4.12)
+void EngineSound_set_hrtf_params(u16 lpAlpha_fp12,
+                                 u16 gainLowL, u16 gainHighL,
+                                 u16 gainLowR, u16 gainHighR);
+
+// (reserved) ITD API removed for Sappy-style ILD-only baseline
+
 // Set independent front/rear mix (volumes 0-64, frequencies in Hz)
 void EngineSound_set_mix(u32 volFront0to64, u32 volRear0to64,
                          u32 frontFreqHz, u32 rearFreqHz);

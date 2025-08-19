@@ -4,6 +4,7 @@
 #include "EngineSound.h"
 #include "car_front.h"
 #include "car_front_smooth.h"
+#include "Prebaked.h"
 
 // Simple sine wave sample for testing (256 samples, one period)
 const s8 sineWaveData[] = {
@@ -80,6 +81,9 @@ int main(void) {
     static u16 savedGreen[9];
     static int savedGreenX = -1, savedGreenY = -1;
     
+    // Prebaked mode flag
+    static bool pbActive = false;
+
     // Main loop
     while(1) {
         // Wait for VBlank
@@ -105,19 +109,81 @@ int main(void) {
             EngineSound_stop();
         }
 
-        // Demo mode variables
-        static u32 demoFrame=0; 
-        static bool demoOn=false;
-        static int panSel = 1; // 0=left, 1=center, 2=right
-        static int panDynamicMode = 0; // 0=none, 1=L->R, 2=R->L
-        static bool nextFrontToBack = false; // false: back->front (default), true: front->back
+        // Demo mode removed
 
-        // A toggles manual control mode
+        // B toggles prebaked HRTF mode at any time (enters manual control for B-mode)
+        if(key_hit(KEY_B)){
+            if(!pbActive){
+                // Enter B-mode - make sure A-mode is fully stopped
+                EngineSound_stop();
+                manualMode = false;
+                
+                // Clean up any existing visuals
+                if(centerSaved){
+                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                        int px=120+dx, py=80+dy; ((u16*)MEM_VRAM)[py*240+px] = savedCenter[idx++];
+                    }
+                    centerSaved=false;
+                }
+                if(savedGreenX>=0){
+                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                        int px=savedGreenX+dx, py=savedGreenY+dy; ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
+                    }
+                    savedGreenX=-1; savedGreenY=-1;
+                }
+                
+                // Initialize prebaked system (parameters ignored, uses prebaked assets)
+                static bool prebaked_initialized = false;
+                if(!prebaked_initialized) {
+                    Prebaked_init(NULL, 0, 0, 0, 0);
+                    prebaked_initialized = true;
+                }
+                
+                // Start prebaked playback
+                Prebaked_enable(true);
+                Prebaked_update_by_position(120, 80, 64);
+                
+                // Set up visual mode
+                manualMode = true;
+                manualX = 120;
+                manualY = 80;
+                
+                // Draw dots
+                int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                    int px=120+dx, py=80+dy; savedCenter[idx] = ((u16*)MEM_VRAM)[py*240+px]; ((u16*)MEM_VRAM)[py*240+px] = RGB15(31,31,31); idx++; }
+                centerSaved=true;
+                idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                    int px=manualX+dx, py=manualY+dy; savedGreen[idx] = ((u16*)MEM_VRAM)[py*240+px]; ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0); idx++; }
+                savedGreenX=manualX; savedGreenY=manualY;
+                pbActive = true;
+            }else{
+                // Exit B-mode  
+                Prebaked_stop();
+                pbActive = false;
+                manualMode = false;
+                
+                // Restore visuals
+                if(centerSaved){
+                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                        int px=120+dx, py=80+dy; ((u16*)MEM_VRAM)[py*240+px] = savedCenter[idx++];
+                    }
+                    centerSaved=false;
+                }
+                if(savedGreenX>=0){
+                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                        int px=savedGreenX+dx, py=savedGreenY+dy; ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
+                    }
+                    savedGreenX=-1; savedGreenY=-1;
+                }
+            }
+        }
+
+        // A toggles A-mode manual (live engine). If B-mode active, disable it and re-init A-mode
         if(key_hit(KEY_A)) {
+            if(pbActive){ Prebaked_stop(); Prebaked_enable(false); pbActive=false; }
             manualMode = !manualMode;
             if(manualMode) {
-                // Entering manual mode - stop demo if running
-                demoOn = false;
+                // Entering manual mode - ensure engine is clean
                 EngineSound_stop();
                 // Reset position to center
                 manualX = 120;
@@ -145,6 +211,9 @@ int main(void) {
                 }
                 savedGreenX = manualX;
                 savedGreenY = manualY;
+                // Immediately start live engine centered (avoid needing movement to start)
+                EngineSound_set_pan(64,64);
+                EngineSound_start(true, 64, 22050);
             } else {
                 // Exiting manual mode - stop engine
                 EngineSound_stop();
@@ -211,143 +280,105 @@ int main(void) {
             u32 r  = (nx > ny) ? nx : ny; // 0..64
             u32 volume = (r >= 64) ? 0 : (64 - r);
             
-            // Sound state management
-            static bool wasPlaying = false;
-            static bool wasFront = true;  // Start with front sample
-            
-            // Update panning always for responsiveness
-            EngineSound_set_pan(panL, panR);
-            
-            // Only touch the sound engine when something actually changes
-            if(volume > 0) {
-                if(!wasPlaying) {
-                    // Starting fresh - determine sample and start
-                    bool useFront = (manualY < 80);
-                    u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
-                    EngineSound_start(useFront, volume, targetHz);
-                    wasPlaying = true;
-                    wasFront = useFront;
-                    prevX = manualX;
-                    prevY = manualY;
-                } else {
-                    // Already playing - check if we need to change anything
-                    
-                    // Sample switching with hysteresis based on forward/back (relative to head facing north)
-                    // Above center (smaller Y) = front; below = back
-                    bool shouldBeFront = (manualY < 70);
-                    bool shouldBeBack = (manualY > 90);
-                    
-                    if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
-                        // Switch samples when crossing threshold
-                        wasFront = !wasFront;
-                        u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
-                        EngineSound_start(wasFront, volume, targetHz);
-                        prevX = manualX;
-                        prevY = manualY;
-                    } else if(positionChanged) {
-                        // Position changed - update volume only
-                        // Use update_volume to avoid touching pitch
-                        EngineSound_update_volume(volume);
-                        prevX = manualX;
-                        prevY = manualY;
-                        // Update green dot: restore previous then draw new, saving new background
-                        if(savedGreenX>=0){
-                            int idx=0;
-                            for(int dy=-1; dy<=1; dy++){
-                                for(int dx=-1; dx<=1; dx++){
-                                    int px=savedGreenX+dx, py=savedGreenY+dy;
-                                    ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
-                                }
-                            }
-                        }
-                        int idx2=0;
+            if(pbActive){
+                // B-mode: prebaked stereo fixed pair; update by position (no bucket switch yet)
+                Prebaked_update_by_position(manualX, manualY, volume);
+                // Update green dot visuals when moved
+                if(positionChanged){
+                    if(savedGreenX>=0){
+                        int idx=0;
                         for(int dy=-1; dy<=1; dy++){
                             for(int dx=-1; dx<=1; dx++){
-                                int px=manualX+dx, py=manualY+dy;
-                                savedGreen[idx2] = ((u16*)MEM_VRAM)[py*240+px];
-                                ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0);
-                                idx2++;
+                                int px=savedGreenX+dx, py=savedGreenY+dy;
+                                ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
                             }
                         }
-                        savedGreenX=manualX; savedGreenY=manualY;
                     }
-                    // If nothing changed, DO NOTHING - let it play!
+                    int idx2=0;
+                    for(int dy=-1; dy<=1; dy++){
+                        for(int dx=-1; dx<=1; dx++){
+                            int px=manualX+dx, py=manualY+dy;
+                            savedGreen[idx2] = ((u16*)MEM_VRAM)[py*240+px];
+                            ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0);
+                            idx2++;
+                        }
+                    }
+                    savedGreenX=manualX; savedGreenY=manualY;
+                    prevX = manualX; prevY = manualY;
                 }
             } else {
-                // Volume is 0, stop if playing
-                if(wasPlaying) {
-                    EngineSound_stop();
-                    wasPlaying = false;
+                // Live engine path (unchanged vs A-mode)
+                // Sound state management
+                static bool wasPlaying = false;
+                static bool wasFront = true;  // Start with front sample
+                
+                // Update panning (ILD)
+                EngineSound_set_pan(panL, panR);
+                
+                // Only touch the sound engine when something actually changes
+                if(volume > 0) {
+                    if(!wasPlaying) {
+                        bool useFront = (manualY < 80);
+                        u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
+                        EngineSound_start(useFront, volume, targetHz);
+                        wasPlaying = true;
+                        wasFront = useFront;
+                        prevX = manualX;
+                        prevY = manualY;
+                    } else {
+                        bool shouldBeFront = (manualY < 70);
+                        bool shouldBeBack = (manualY > 90);
+                        if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
+                            wasFront = !wasFront;
+                            u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                            EngineSound_start(wasFront, volume, targetHz);
+                            prevX = manualX;
+                            prevY = manualY;
+                        } else if(positionChanged) {
+                            EngineSound_update_volume(volume);
+                            prevX = manualX;
+                            prevY = manualY;
+                            if(savedGreenX>=0){
+                                int idx=0;
+                                for(int dy=-1; dy<=1; dy++){
+                                    for(int dx=-1; dx<=1; dx++){
+                                        int px=savedGreenX+dx, py=savedGreenY+dy;
+                                        ((u16*)MEM_VRAM)[py*240+px] = savedGreen[idx++];
+                                    }
+                                }
+                            }
+                            int idx2=0;
+                            for(int dy=-1; dy<=1; dy++){
+                                for(int dx=-1; dx<=1; dx++){
+                                    int px=manualX+dx, py=manualY+dy;
+                                    savedGreen[idx2] = ((u16*)MEM_VRAM)[py*240+px];
+                                    ((u16*)MEM_VRAM)[py*240+px] = RGB15(0,31,0);
+                                    idx2++;
+                                }
+                            }
+                            savedGreenX=manualX; savedGreenY=manualY;
+                        }
+                    }
+                } else {
+                    if(wasPlaying) {
+                        EngineSound_stop();
+                        wasPlaying = false;
+                    }
                 }
             }
             
             // Visual redraws happen only on movement; nothing to do here when static
         } else {
-            // Demo mode controls (when not in manual mode)
-            
-            // D-Pad for static pan positions
-            if(key_hit(KEY_LEFT)) { 
-                panSel = 0; 
-                panDynamicMode = 0;  // Reset dynamic mode
-                EngineSound_set_pan(64,0); 
-            }
-            if(key_hit(KEY_RIGHT)) { 
-                panSel = 2; 
-                panDynamicMode = 0;  // Reset dynamic mode
-                EngineSound_set_pan(0,64); 
-            }
-            
-            // UP resets to center and stops dynamic panning
-            if(key_hit(KEY_UP)) { 
-                panSel = 1; 
-                panDynamicMode = 0;  // Reset dynamic mode
-                EngineSound_set_pan(64,64); 
-            }
-            
-            // L/R trigger dynamic pan modes (press once, not hold)
-            if(key_hit(KEY_L)) { 
-                panDynamicMode = 1;  // Start L->R sweep
-            }
-            if(key_hit(KEY_R)) { 
-                panDynamicMode = 2;  // Start R->L sweep
-            }
-
-            // B toggles direction for the NEXT sweep only
-            if(key_hit(KEY_B)) nextFrontToBack = !nextFrontToBack;
-
-            if(key_hit(KEY_START)) {
-                if(!demoOn){
-                    // starting a new sweep: apply stored direction and current pan
-                    EngineSound_set_direction(nextFrontToBack);
-                    if(panDynamicMode==0){
-                        if(panSel==0) EngineSound_set_pan(64,0); else if(panSel==1) EngineSound_set_pan(64,64); else EngineSound_set_pan(0,64);
-                    }
-                    demoFrame=0; demoOn=true;
+            // Non-manual mode: keep only B-mode toggle
+            if(key_hit(KEY_B)){
+                static bool pb=false; pb=!pb;
+                Prebaked_enable(pb);
+                if(pb){
+                    Prebaked_init((const s8*)carFront, (u32)audio_car_front_raw_len, 0, (u32)audio_car_front_raw_len, 22050);
+                    Prebaked_update_by_position(120,80,64);
                 }else{
-                    // stopping current sweep
-                    demoOn=false; EngineSound_stop();
+                    Prebaked_stop();
                 }
-            }
-
-            if(demoOn){
-                // If dynamic pan requested, move across over the sweep duration
-                if(panDynamicMode!=0){
-                    const u32 total=360; u32 f = demoFrame<total?demoFrame:total; // clamp
-                    // t in [0,1]
-                    u32 t_num = f; u32 t_den = total; // integer form
-                    // left gain is either (1-t) or t; right is complement
-                    u32 left, right;
-                    if(panDynamicMode==1){ // L->R
-                        left  = (u32)((64ULL*(t_den - t_num))/t_den);
-                        right = 64 - left;
-                    }else{ // R->L
-                        right = (u32)((64ULL*(t_den - t_num))/t_den);
-                        left  = 64 - right;
-                    }
-                    EngineSound_set_pan(left, right);
-                }
-                EngineSound_demo_update_passby(demoFrame++, 360);
-                if(demoFrame>360){ demoOn=false; EngineSound_stop(); }
             }
         }
     }
