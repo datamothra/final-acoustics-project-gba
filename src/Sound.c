@@ -145,8 +145,25 @@ IWRAM_CODE void SndMix(void) {
         }
     }
 
-    // Dynamic scale: 1ch => >>12, 2ch => >>13, 3+ => >>14 (since we multiplied by vol(<=64) and pan(<=64))
-    u32 shift = (activeCount <= 1) ? 12 : (activeCount == 2 ? 13 : 14);
+    // Dynamic scale tuned for hard-panned stereo: treat left/right as separate ears
+    // If exactly two channels and they are hard-panned (one left-only, one right-only), use 12 like 1ch
+    u32 shift = 12;
+    if(activeCount >= 3) {
+        shift = 14;
+    } else if(activeCount == 2) {
+        // Heuristic: if both channels have significant energy in both pans we'll assume overlap
+        // and use a slightly higher shift to avoid clipping
+        bool overlap = false;
+        int seen = 0;
+        for (int c = 0; c < SND_MAX_CHANNELS; c++) {
+            SOUND_CHANNEL *ch = &sndChannel[c];
+            if(ch->data == 0) continue;
+            seen++;
+            if(ch->panL > 0 && ch->panR > 0) { overlap = true; break; }
+            if(seen == 2) break;
+        }
+        shift = overlap ? 13 : 12;
+    }
 
     // Downmix to 8-bit with rounding and clamp
     for (i = 0; i < sndVars.mixBufferSize; i++) {

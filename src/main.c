@@ -6,6 +6,10 @@
 #include "car_front_smooth.h"
 #include "Prebaked.h"
 
+// A-mode pitch tuning
+#define FRONT_SAMPLE_HZ 26000
+#define BACK_SAMPLE_HZ  ((FRONT_SAMPLE_HZ * 2) / 3)
+
 // Simple sine wave sample for testing (256 samples, one period)
 const s8 sineWaveData[] = {
     0, 3, 6, 9, 12, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43, 46,
@@ -66,7 +70,7 @@ int main(void) {
     u32 loopStart = 0;  // Loop from beginning
     u32 loopLength = audio_car_front_raw_len;  // Loop entire sample (3371 samples)
     EngineSound_init((const s8*)carFront, (const s8*)carFront,
-                     (u32)audio_car_front_raw_len, loopStart, loopLength, 22050);
+                     (u32)audio_car_front_raw_len, loopStart, loopLength, FRONT_SAMPLE_HZ);
     
     // Enable interrupts
     REG_IME = 1;
@@ -120,7 +124,7 @@ int main(void) {
                 
                 // Clean up any existing visuals
                 if(centerSaved){
-                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                    int idx=0; for(int dy=-2; dy<=2; dy++) for(int dx=-2; dx<=2; dx++){
                         int px=120+dx, py=80+dy; ((u16*)MEM_VRAM)[py*240+px] = savedCenter[idx++];
                     }
                     centerSaved=false;
@@ -148,8 +152,8 @@ int main(void) {
                 manualX = 120;
                 manualY = 80;
                 
-                // Draw dots
-                int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                // Draw larger head dot (5x5) to represent head width
+                int idx=0; for(int dy=-2; dy<=2; dy++) for(int dx=-2; dx<=2; dx++){
                     int px=120+dx, py=80+dy; savedCenter[idx] = ((u16*)MEM_VRAM)[py*240+px]; ((u16*)MEM_VRAM)[py*240+px] = RGB15(31,31,31); idx++; }
                 centerSaved=true;
                 idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
@@ -164,7 +168,7 @@ int main(void) {
                 
                 // Restore visuals
                 if(centerSaved){
-                    int idx=0; for(int dy=-1; dy<=1; dy++) for(int dx=-1; dx<=1; dx++){
+                    int idx=0; for(int dy=-2; dy<=2; dy++) for(int dx=-2; dx<=2; dx++){
                         int px=120+dx, py=80+dy; ((u16*)MEM_VRAM)[py*240+px] = savedCenter[idx++];
                     }
                     centerSaved=false;
@@ -213,7 +217,7 @@ int main(void) {
                 savedGreenY = manualY;
                 // Immediately start live engine centered (avoid needing movement to start)
                 EngineSound_set_pan(64,64);
-                EngineSound_start(true, 64, 22050);
+                EngineSound_start(true, 64, FRONT_SAMPLE_HZ);
             } else {
                 // Exiting manual mode - stop engine
                 EngineSound_stop();
@@ -281,7 +285,7 @@ int main(void) {
             u32 volume = (r >= 64) ? 0 : (64 - r);
             
             if(pbActive){
-                // B-mode: prebaked stereo fixed pair; update by position (no bucket switch yet)
+                // B-mode: prebaked stereo with front/back rotation and ILD only
                 Prebaked_update_by_position(manualX, manualY, volume);
                 // Update green dot visuals when moved
                 if(positionChanged){
@@ -319,7 +323,7 @@ int main(void) {
                 if(volume > 0) {
                     if(!wasPlaying) {
                         bool useFront = (manualY < 80);
-                        u32 targetHz = useFront ? 22050 : (22050 * 2 / 3);
+                        u32 targetHz = useFront ? FRONT_SAMPLE_HZ : BACK_SAMPLE_HZ;
                         EngineSound_start(useFront, volume, targetHz);
                         wasPlaying = true;
                         wasFront = useFront;
@@ -330,7 +334,7 @@ int main(void) {
                         bool shouldBeBack = (manualY > 90);
                         if((wasFront && shouldBeBack) || (!wasFront && shouldBeFront)) {
                             wasFront = !wasFront;
-                            u32 targetHz = wasFront ? 22050 : (22050 * 2 / 3);
+                            u32 targetHz = wasFront ? FRONT_SAMPLE_HZ : BACK_SAMPLE_HZ;
                             EngineSound_start(wasFront, volume, targetHz);
                             prevX = manualX;
                             prevY = manualY;
