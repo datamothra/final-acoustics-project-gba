@@ -3,6 +3,7 @@
 #include "car_front.h"
 #include "test_sine.h"
 #include "pb_table.h"
+#include "az16_table.h"
 #include <string.h>
 
 // B-mode: True stereo test using two hard-panned channels with different tones
@@ -26,15 +27,12 @@ void Prebaked_enable(bool enable){
         sndChannel[0].data = 0;
         sndChannel[3].data = 0;
 
-        // Start centered: azimuth center, front
-        int azIdx = PB_AZ_COUNT/2;
-        int fbIdx = 0;
-        int idx = fbIdx + azIdx*PB_FB_COUNT;
-
-        const s8* left = (const s8*)pb_table_L[idx];
-        const s8* right = (const s8*)pb_table_R[idx];
-        u32 len = PB_LEN; // same as A-mode source length
-        u32 inc = (SND_MIX_RATE_HZ << 12) / 22050; if(!inc) inc = 1; // 22.05kHz target
+        // Start centered bucket for az16
+        int azIdx = AZ16_COUNT/2;
+        const s8* left = (const s8*)az16_L[azIdx];
+        const s8* right = (const s8*)az16_R[azIdx];
+        u32 len = AZ16_LEN; // use az16 length
+        u32 inc = (SND_MIX_RATE_HZ << 12) / SND_MIX_RATE_HZ; if(!inc) inc = 1; // 1:1 playback
 
         // Left ear hard left
         sndChannel[PB_LEFT_CH].data = (s8*)left;
@@ -63,15 +61,12 @@ void Prebaked_enable(bool enable){
 
 void Prebaked_update_by_position(int x, int y, u32 volume0to64){
     if(!s_enabled) return;
-    // Map X/Y to azimuth/front-back buckets and switch pair cleanly
-    int azIdx = (x < 120) ? ((120 - x) * (PB_AZ_COUNT/2) / 120) : ((x - 120) * (PB_AZ_COUNT/2) / 120 + PB_AZ_COUNT/2);
-    if(azIdx < 0) azIdx = 0; if(azIdx >= PB_AZ_COUNT) azIdx = PB_AZ_COUNT-1;
-    int fbIdx = (y < 80) ? 0 : 1; // 0=front,1=back
-    int idx = fbIdx + azIdx*PB_FB_COUNT;
-
-    const s8* left = (const s8*)pb_table_L[idx];
-    const s8* right = (const s8*)pb_table_R[idx];
-    u32 len = PB_LEN;
+    // Map X to az16 azimuth bucket
+    int azIdx = (x < 120) ? ((120 - x) * (AZ16_COUNT/2) / 120) : ((x - 120) * (AZ16_COUNT/2) / 120 + AZ16_COUNT/2);
+    if(azIdx < 0) azIdx = 0; if(azIdx >= AZ16_COUNT) azIdx = AZ16_COUNT-1;
+    const s8* left = (const s8*)az16_L[azIdx];
+    const s8* right = (const s8*)az16_R[azIdx];
+    u32 len = AZ16_LEN;
     // If pointer changed, swap at loop boundary by resetting pos together
     if(sndChannel[PB_LEFT_CH].data != left || sndChannel[PB_RIGHT_CH].data != right){
         sndChannel[PB_LEFT_CH].data = (s8*)left;
